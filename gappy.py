@@ -131,11 +131,9 @@ class Util_telnet(object):
         self.tn.read_until(self.promt+'(config)#', 5)
         self.tn.write('app\r')
         self.tn.read_until(self.promt+'(app)#', 5)
-        print 'debug1'+type
-#        self.tn.write(type)
-#        self.tn.read_until(self.promt+'(app)#', 5)
-        print 'debug2'+cmd
-        self.tn.write(cmd)
+        self.tn.write(type+'\r')
+        self.tn.read_until(self.promt+'(app)#', 5)
+        self.tn.write(cmd+'\r')
         s = self.tn.read_until(self.promt+'(app)#', 5)
         print 'debug3'+s
         self.tn.close()
@@ -149,7 +147,7 @@ class Util_telnet(object):
 def test():
     print "test"
     ut = Util_telnet(promt)
-    vtyret = ut.ssl_cmd('inner','interface view\r')
+    vtyret = ut.ssl_cmd('inner','interface view')
     print vtyret
     print 'vtyret '+vtyret+'\n'
     return "test return"
@@ -184,7 +182,7 @@ def route_ajax_checkUser():
 def impl_ajax_getNetworkList(type,filter):
     retobj = {'status':1, 'message':'ok'}
     ut = Util_telnet(promt)
-    vtyret = ut.ssl_cmd(type,'interface view\r')
+    vtyret = ut.ssl_cmd(type,'interface view')
     if (vtyret is None):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
@@ -254,7 +252,7 @@ def route_ajax_setNetworkConfig():
         return jsonify(retobj)
     
     dataobj = json.loads(data)
-    cmd = "interface edit ifname {name} ip {ip} mask {mask} vip {vip} vmask {vmask} gateway {gateway}\r"
+    cmd = "interface edit ifname {name} ip {ip} mask {mask} vip {vip} vmask {vmask} gateway {gateway}"
     cmd.format(name=dataobj.Name,ip=dataobj.Ip,mask=dataobj.NetMask,vip=dataobj.Vip,vmask=dataobj.Vipmask,gateway=dataobj.gateway)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
@@ -283,7 +281,7 @@ def route_ajax_setNetworkConfig():
 def impl_ajax_getRouterList(type,filter):
     retobj = {'status':1, 'message':'ok'}
     ut = Util_telnet(promt)
-    vtyret = ut.ssl_cmd(type,'route view\r')
+    vtyret = ut.ssl_cmd(type,'route view')
     if (vtyret is None):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
@@ -351,7 +349,7 @@ def route_ajax_addRouter():
         return jsonify(retobj)
     
     dataobj = json.loads(data)
-#    cmd = 'route add routename {name} proto {proto} dip {dip} dport {dport} outif {outif} inif {inif} inport {inport}\r'
+#    cmd = 'route add routename {name} proto {proto} dip {dip} dport {dport} outif {outif} inif {inif} inport {inport}'
 #    cmd = cmd.format('11', '22', '33', '44', '55', '66', '77')
 
     ut = Util_telnet(promt)
@@ -375,7 +373,7 @@ def setRouterConfig():
         return jsonify(retobj)
     
     dataobj = json.loads(data)
-#    cmd='route edit routename {name} proto {proto} sip {sip} sport {sport} dip {dip} dport {dport} outif {outif} inif {inif} inport {inport}\r'
+#    cmd='route edit routename {name} proto {proto} sip {sip} sport {sport} dip {dip} dport {dport} outif {outif} inif {inif} inport {inport}'
 #    cmd.format(name=dataobj.Name,proto=dataobj.Protocol,)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
@@ -408,7 +406,7 @@ def deleteRouter():
 def getGroupList():
     retobj = {'status':1, 'message':'ok'}
     type='inner'
-    cmd='group view\r'
+    cmd='group view'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -444,7 +442,7 @@ def addGroup():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-#    cmd='\r'
+#    cmd=''
 #    cmd.format()
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
