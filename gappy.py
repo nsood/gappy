@@ -1,16 +1,22 @@
 #coding=utf-8  
-from util_telnet import SystemStatus, Util_telnet, upgrade, interface_info
-from util_telnet import changeIpaddr
-from util_telnet import shortname, updateCa
-
 from flask import Flask, request, render_template, make_response, session, redirect, jsonify
 import json;
 #import sqlite3
 import time
 from flask_cors import CORS
+import os, ConfigParser
+import re
+import telnetlib
+import time
+import ssl
+
+outer="goto_outer"
+inner="goto_inner"
+arbiter="goto_arbiter"
+promt='GLCNS'
+
 app = Flask(__name__)
 CORS(app)
-
 
 ##################### tools function ###################
 
@@ -21,18 +27,15 @@ def req_get(key):
         ret = request.form.get(key)
     return ret
 
-
 # 从会话中获取指定数据
 def session_get(key):
         return session.get(key)
-
 
 # 为会话分配指定数据
 def session_set(key, value):
     session[key] = value
     if (value is None):
         session.pop(key)
-
 
 # 全局数据库函数，select返回对应的数组，update/delete返回受到影响的行数/ROWID
 db = None
@@ -60,12 +63,10 @@ def db_exec(sql, args=[], lastid=False):
         #print 'db execute failed\n\tsql: {0}\n\terror: {1}\n\n'.format(sql, e)
         return None
 
-
 # 数据库初始化
 def db_init():
     ret = db_exec('create table users(id integer primary key autoincrement, name varchar)')
-
-    
+  
 # 把字符串里多余的空格、前后空格、前后换行全部移除
 def strtrim(s):
     s = s.strip(' \n')
@@ -75,7 +76,6 @@ def strtrim(s):
         n2 = len(s)
         if (n1 == n2):
             return s
-
 
 # 把VTY状态转为对象：'vty-result=2|Not found' -> {'status': 0, 'message': '2|Not
 # found'}
@@ -97,30 +97,40 @@ def vtyresul_to_obj(s):
     retobj['message'] = s
     return retobj
 
-def telnet_call(cmd):
-    s={}
-    if (cmd == 'interface view'):
-        ut = Util_telnet('GLCNS')
-        s = ut.ssl_show_interface()
-    return s
+class Util_telnet(object):
+    """description of class"""
+    def __init__(self, promt, host='192.168.10.156', port=2601):
+        self.promt= promt
+        self.host = host
+        self.port = port
+        self.tn = telnetlib.Telnet()
 
-
-# 调用telnet，传入命令，返回字符串
-#def telnet_call(cmd):
-#    if (cmd == 'interface view'):
-#        return 'P0  192.168.10.200  255.255.255.0  192.168.40.200  255.255.255.0  2.2.2.2\nP1  192.168.11.123  255.255.255.0  192.168.44.211  255.255.255.0  4.4.4.4\nP2  192.168.12.123  255.255.255.0  192.168.41.211  255.255.255.0  4.4.4.4\nP3  192.168.13.123  255.255.255.0  192.168.42.211  255.255.255.0  4.4.4.4'
-#    if (cmd == 'route view'):
-#        return '888 TCP 192.168.10.234 1111 P0 P1 33\n199 HTTP 192.168.10.234 1111 P0 P1 333\n122 HTTP 192.168.10.234 1111 P0 P3 888\n111 HTTP 192.168.10.234 1111 P0 P3 899\n123 HTTP 192.168.10.234 1111 P0 P3 801'
-#    return None
-
-
-
-
-
+    def ssl_cmd(self,type,cmd):
+        print 'ssl_cmd in'
+        rt = {}
+        try:
+            self.tn.open(self.host, self.port, 1)
+        except Exception as e:
+            return rt
+        print "open success"
+        if (type is None):
+            return type
+        self.tn.read_until(self.promt+'>', 5)
+        self.tn.write('enable\r')
+        self.tn.read_until(self.promt+'#', 5)
+        self.tn.write('configure terminal\r')
+        self.tn.read_until(self.promt+'(config)#', 5)
+        self.tn.write('app\r')
+        self.tn.read_until(self.promt+'(app)#', 5)
+        self.tn.write(type)
+        self.tn.read_until(self.promt+'(app)#', 5)
+        self.tn.write(cmd)
+        s = self.tn.read_until(self.promt+'(app)#', 5)
+        self.tn.close()
+        return s
 
 
 ##################### ajax call #####################
-
 #响应登陆请求
 @app.route('/ajax/data/user/checkUser')
 def route_ajax_checkUser():
@@ -144,14 +154,20 @@ def route_ajax_checkUser():
     retobj['login_info'] = logininfo
     return jsonify(retobj)
 
-
-
 # 实现获取网卡信息
-def impl_ajax_getNetworkList(filter):
+def impl_ajax_getNetworkList(type,filter):
     retobj = {'status':1, 'message':'ok'}
-
-    vtyret = telnet_call('interface view')
-    if (vtyret is None):
+    if (type=="inner"):
+        type="goto_inner"
+    elif (type=="outer"):
+        type="goto_outer"
+    elif (type=="arbiter"):
+        type="goto_arbiter"
+    else
+        type=None
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,'interface view')
+    if (vtyret is None)||(type is None):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return retobj
@@ -179,43 +195,53 @@ def impl_ajax_getNetworkList(filter):
     retobj['data'] = rows
     return retobj
 
-
-#获取网卡列表
+#获取网卡列表getNetworkList
 @app.route('/ajax/data/device/getNetworkList')
 def route_ajax_getNetworkList():
-    retobj = impl_ajax_getNetworkList(None)
+    type = req_get('type')
+    if (type is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    retobj = impl_ajax_getNetworkList(type,None)
     return jsonify(retobj)
 
-
-#获取网卡信息
+#获取网卡信息getNetworkConfig
 @app.route('/ajax/data/device/getNetworkConfig')
 def route_ajax_getNetworkConfig():
     retobj = {'status':1, 'message':'ok'}
-
+    type = req_get('type')
     id = req_get('id')
     if (id is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
 
-    retobj = impl_ajax_getNetworkList(id)
+    retobj = impl_ajax_getNetworkList(type,id)
     return jsonify(retobj)
 
-
-#设置网卡信息
+#设置网卡信息setNetworkConfig
 @app.route('/ajax/data/device/setNetworkConfig')
 def route_ajax_setNetworkConfig():
     retobj = {'status':1, 'message':'ok'}
-
+    id = req_get('id')
+    type = req_get('type')
     data = req_get('data')
     if (data is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     
-    reqobj = json.loads(data)
+    dataobj = json.loads(data)
+    cmd = "interface edit ifname {name} ip {ip} mask {mask} vip {vip} vmask {vmask}"
+    cmd.format(name=dataobj.name,ip=dataobj.ip,mask=dataobj.mask,vip=dataobj.vip,vmask=dataobj.vmask)
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None)||(type is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
     return jsonify(retobj)
-
 
 #获取路由列表
 @app.route('/ajax/data/device/getRouterList')
@@ -250,8 +276,6 @@ def route_ajax_getRouterList():
     retobj['data'] = jrows
     return jsonify(retobj)
 
-
-
 # 添加一个路由项
 @app.route('/ajax/data/device/xxxx')
 def route_ajax_addRouter():
@@ -268,9 +292,6 @@ def route_ajax_addRouter():
     
     retobj = vtyresul_to_obj(vtyret);
     return jsonify(retobj)
-
-
-
 
 ##################### templates ######################
 
@@ -310,9 +331,6 @@ def route_templates(path):
     if (request.path[0:11] == '/templates/'):
         path = request.path[10:]
     return render_template(path)
-
-
-
 
 
 ################## main ####################
