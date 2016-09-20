@@ -634,7 +634,7 @@ def addGroup():
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
-	#3  bind group and acl
+	#3  bind group and acl  123
     cmd='group {groupname} bind acl {index}'
     cmd.format(groupname=dataobj.Name,index=dataobj.Name+'_1')
     vtyret = ut.ssl_cmd(type,cmd)
@@ -718,9 +718,77 @@ def getGroupConfig():
     retobj['data'].append(jobj)
     return jsonify(retobj)
 #d 编辑用户组 保存数据
-#torommow dose!!!!
-#e 删除用户组
+@app.route('/ajax/data/rule/setGroupConfig')
+def setGroupConfig():
+    retobj = {'status':1, 'message':'ok'}
+    type='inner'
+    ut = Util_telnet(promt)
+    data = req_get('data')
+    if (data is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    dataobj = json.loads(data)
+	#根据传入id获取到原组名 ,不等表示更名
+    grouplist = impl_ajax_getGroupList()
+    grouplistobj = jsonify(grouplist)
+    oldname = grouplistobj['data'][int(dataobj.ID)]['name']
+    if (dataobj.Name != oldname)
+        cmd = 'group  rename groupname {old} groupname {new}'.format(old=oldname,new=dataobj.Name)
+        vtyret = ut.ssl_cmd(type,cmd)
+        if (vtyret is None):
+            retobj['status'] = 0
+            retobj['message'] = 'vty failed'
+            return jsonify(retobj)
+    #acl edit x3
+    cmd = 'acl edit index {i} access {a} dir {d} rule_mod {m} rule_servers {ss}'
+    cmd.format(i=dataobj.Name+'_1',a=dataobj.HttpAccess,d=dataobj.HttpDirection,m=dataobj.HttpAddress,ss=dataobj.HttpIps)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    cmd = 'acl edit index {i} access {a} dir {d} rule_mod {m} rule_servers {ss}'
+    cmd.format(i=dataobj.Name+'_2',a=dataobj.FtpAccess,d=dataobj.FtpDirection,m=dataobj.FtpAddress,ss=dataobj.FtpIps)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    cmd = 'acl edit index {i} access {a} dir {d} rule_mod {m} rule_servers {ss}'
+    cmd.format(i=dataobj.Name+'_3',a=dataobj.TDCSAccess,d=dataobj.TDCSDirection,m=dataobj.TDCSAddress,ss=dataobj.TDCSIps)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    retobj = vtyresul_to_obj(vtyret)
+    return jsonify(retobj)
 
+
+#e 删除用户组
+@app.route('/ajax/data/rule/deleteGroup')
+def deleteGroup():
+    retobj = {'status':1, 'message':'ok'}
+    type='inner'
+    ut = Util_telnet(promt)
+    id = req_get('id')
+    if (id is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+	#根据传入id获取到原组名 ,不等表示更名
+    grouplist = impl_ajax_getGroupList()
+    grouplistobj = jsonify(grouplist)
+    name = grouplistobj['data'][int(id)]['name']
+    cmd='group del groupname {n}'.format(n=name)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    retobj = vtyresul_to_obj(vtyret)
+    return jsonify(retobj)
 
 #2 用户规则
 def impl_ajax_getUserList():
@@ -782,7 +850,7 @@ def addUser():
     retobj = vtyresul_to_obj(vtyret);
     return jsonify(retobj)    
 
-#d 获取一条用户组
+#c 获取一条用户组
 @app.route('/ajax/data/rule/getUserConfigGroup')
 def getUserConfigGroup():
     retobj = {'status':1, 'message':'ok'}
