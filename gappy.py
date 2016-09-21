@@ -314,15 +314,13 @@ def route_ajax_setNetworkConfig():
 @app.route('/ajax/data/rule/getIpList')
 def getIpList():
     retobj = {'status':1, 'message':'ok'}
-    type = req_get('type')
-#debug
-#    type = 'inner'
-#end
-    if (type is None):
-        retobj['status'] = 0
-        retobj['message'] = 'invalid request'
-        return jsonify(retobj)
-    
+#    type = req_get('type')
+    # if (type is None):
+        # retobj['status'] = 0
+        # retobj['message'] = 'invalid request'
+        # return jsonify(retobj)
+
+    type = 'outer'
     cmd='ipgroup view'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
@@ -353,7 +351,7 @@ def getIpList():
 @app.route('/ajax/data/device/addIp')
 def addIp():
     retobj = {'status':1, 'message':'ok'}
-    type = req_get('type')
+#    type = req_get('type')
     ipGroupName = req_get('ipGroupName')
     ip = req_get('ip')
 
@@ -363,13 +361,22 @@ def addIp():
 #    ip = '55.55.55.55'
 #end
 
-    if ((ipGroupName is None) or (ip is None) or (type is None)):
+    if ((ipGroupName is None) or (ip is None)):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     cmd='ipgroup add name {n} ipset {i}'
     cmd = cmd.format(n=ipGroupName,i=ip)
     ut = Util_telnet(promt)
+
+    type = 'outer'
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+
+    type = 'inner'
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
         retobj['status'] = 0
@@ -382,19 +389,18 @@ def addIp():
 @app.route('/ajax/data/device/getIpConfig')
 def  getIpConfig():
     retobj = {'status':1, 'message':'ok'}
-    type = req_get('type')
+#    type = req_get('type')
     id = req_get('id')
 
 #debug
-#    type = 'inner'
 #    id = '0'
 #end
-
-    if (id is None or type is None):
+    if (id is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     cmd='ipgroup view'
+    type = 'outer'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -418,23 +424,31 @@ def  getIpConfig():
 @app.route('/ajax/data/device/setIpConfig')
 def setIpConfig():
     retobj = {'status':1, 'message':'ok'}
-    type = req_get('type')
+#    type = req_get('type')
     ipGroupName = req_get('ipGroupName')
     ip = req_get('ip')
 
 #debug
-#    type = 'inner'
 #    ipGroupName = 'group1'
 #    ip = '55.55.55.44'
 #end
 
-    if ((ipGroupName is None) or (ip is None) or (type is None)):
+    if ((ipGroupName is None) or (ip is None)):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     cmd='ipgroup edit name {n} ipset {i}'
     cmd = cmd.format(n=ipGroupName,i=ip)
     ut = Util_telnet(promt)
+
+    type = 'outer'
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+
+    type = 'inner'
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
         retobj['status'] = 0
@@ -446,13 +460,12 @@ def setIpConfig():
 @app.route('/ajax/data/device/deleteIp')
 def deleteIp():
     retobj = {'status':1, 'message':'ok'}
-    type = req_get('type')
+#    type = req_get('type')
     id = req_get('id')
 #debug
 #    id = '0'
-#    type = 'inner'
 #end
-    if (id is None or type is None):
+    if (id is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
@@ -469,6 +482,15 @@ def deleteIp():
     ipGroupName = grouprow[0]
     cmd = 'ipgroup del name {n}'
     cmd = cmd.format(n=ipGroupName)
+
+    type = 'outer'
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+
+    type = 'inner'
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
         retobj['status'] = 0
@@ -514,7 +536,7 @@ def impl_ajax_getRouterList(type,filter):
     retobj['data'] = jrows
     return retobj
 
-# 获取路由列表	test pass
+#a 获取路由列表	test pass
 @app.route('/ajax/data/device/getRouterList')
 def route_ajax_getRouterList():
     retobj = {'status':1, 'message':'ok'}
@@ -529,7 +551,7 @@ def route_ajax_getRouterList():
     retobj = impl_ajax_getRouterList(type,None)
     return jsonify(retobj)
 
-# 获取一个路由	test pass
+#d 获取一个路由	test pass
 @app.route('/ajax/data/device/getRouterConfig')
 def getRouterConfig():
     retobj = {'status':1, 'message':'ok'}
@@ -546,7 +568,7 @@ def getRouterConfig():
     retobj = impl_ajax_getRouterList(type,id)
     return jsonify(retobj)
 
-# 添加一个路由	test pass
+#b 添加一个路由	test pass
 @app.route('/ajax/data/device/addRouter')
 def route_ajax_addRouter():
     retobj = {'status':1, 'message':'ok'}
@@ -584,7 +606,45 @@ def route_ajax_addRouter():
     retobj = vtyresul_to_obj(vtyret)
     return jsonify(retobj)
 
-# 修改一个路由	test pass
+#c 获取IP组		test pass
+@app.route('/ajax/data/device/getRouterConfigGroup')
+def getRouterConfigGroup():
+    retobj = {'status':1, 'message':'ok'}
+    type = req_get('type')
+    type = req_get('id')
+#debug
+#    type = 'inner'
+#    id = '0'
+#end
+    if (type is None or id is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    
+    cmd='ipgroup view'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    id = 0
+    for line in vtyret.split('\n'):
+        fields = line.split(' ')
+        if (len(fields) != 2):
+            continue
+        jobj = {
+                'id' : id,
+                'group':fields[0],
+                }
+        id = id + 1 
+        jrows.append(jobj)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+#e 修改一个路由	test pass
 @app.route('/ajax/data/device/setRouterConfig')
 def setRouterConfig():
     retobj = {'status':1, 'message':'ok'}
@@ -619,7 +679,7 @@ def setRouterConfig():
     retobj = vtyresul_to_obj(vtyret)
     return jsonify(retobj)
 
-# 删除路由		test pass
+#f 删除路由		test pass
 @app.route('/ajax/data/device/deleteRouter')
 def deleteRouter():
     retobj = {'status':1, 'message':'ok'}
