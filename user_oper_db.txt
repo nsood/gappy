@@ -1,0 +1,41 @@
+sqlite3 /etc/gap_sqlite3_db.conf "create table login_table(id   integer PRIMARY KEY autoincrement,time  timestamp default(datetime('now', 'localtime')),ip     char(24),user    char(512),state char(24), content char(1024))"
+sqlite3 /etc/gap_sqlite3_db.conf "insert into login_table(ip,user,state,content) values('1.1.1.1', 'aaa', 'abc', 'bbbbb')"
+sqlite3 /etc/gap_sqlite3_db.conf "select * from login_table"
+
+
+sqlite3 /etc/gap_sqlite3_db.conf "create table op_table(id   integer PRIMARY KEY autoincrement,time  timestamp default(datetime('now', 'localtime')),ip     char(24),user    char(512),op char(24), type char(24))"
+sqlite3 /etc/gap_sqlite3_db.conf "insert into op_table(ip,user,op,type) values('1.1.1.1', 'aaa', 'abc', 'bbbbb')"
+sqlite3 /etc/gap_sqlite3_db.conf "select * from op_table"
+
+zhongquan.zhang 09:54:48
+
+------------数据库相关---------------------------
+sqlite3 test.db "create table sec_event_table(id   integer PRIMARY KEY autoincrement,time  timestamp default(datetime('now', 'localtime')),sip  char(24),dip  char(24),user  char(512),proto  char(32),level   char(32),type    char(32),content char(1024))"
+sqlite3 test.db "insert into sec_event_table(sip,dip,user,proto, level, type, content) values('1.1.1.1', '2.2.2.2', 'aaa', 'HTTP', '3', '1', 'helloworld')"
+sqlite3 test.db "select * from sec_event_table"
+show sec_event_log sip 0.0.0.0 dip 0.0.0.0 proto HTTP stime 2016-08-03/11:31:09 etime 2016-08-03/11:31:55 pgindex 1 pgsize 20
+
+
+sqlite3 test.db "create table sys_event_table(id   integer PRIMARY KEY autoincrement,time  timestamp default(datetime('now', 'localtime')),level   char(32),type    char(32),content char(1024))"
+sqlite3 test.db "insert into sys_event_table(level, type, content) values('3', '1', 'helloworld')"
+sqlite3 test.db "select * from sys_event_table"
+
+
+sqlite3 test.db "create table login_table(id   integer PRIMARY KEY autoincrement,time  timestamp default(datetime('now', 'localtime')),ip     char(24),user    char(512),state char(24), content char(1024))"
+sqlite3 test.db "insert into login_table(ip,user,state,content) values('1.1.1.1', 'aaa', 'abc', 'bbbbb')"
+sqlite3 test.db "select * from login_table"
+
+
+sqlite3 test.db "create table op_table(id   integer PRIMARY KEY autoincrement,time  timestamp default(datetime('now', 'localtime')),ip     char(24),user    char(512),op char(24), type char(24))"
+sqlite3 test.db "insert into op_table(ip,user,op,type) values('1.1.1.1', 'aaa', 'abc', 'bbbbb')"
+sqlite3 test.db "select * from op_table"
+
+
+sqlite3 test.db "create table sys_table(id   integer PRIMARY KEY autoincrement,time  timestamp default(datetime('now', 'localtime')),module   char(64),level char(24), content char(1024))"
+sqlite3 test.db "insert into sys_table(module,level,content) values('a', '1','bbbbb')"
+sqlite3 test.db "select * from sys_table"
+
+sqlite3 test.db "create table audit_table(id   integer PRIMARY KEY autoincrement,time  timestamp default(datetime('now', 'localtime')),user   char(512),proto  char(32), url char(256), content char(1024))"
+sqlite3 test.db "insert into audit_table(user,proto,url, content) values('a','HTTP', 'www.qq.com','bbbbb')"
+sqlite3 test.db "select * from audit_table"
+------------数据库相关---------------------------
