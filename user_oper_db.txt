@@ -39,3 +39,21 @@ sqlite3 test.db "create table audit_table(id   integer PRIMARY KEY autoincrement
 sqlite3 test.db "insert into audit_table(user,proto,url, content) values('a','HTTP', 'www.qq.com','bbbbb')"
 sqlite3 test.db "select * from audit_table"
 ------------数据库相关---------------------------
+管理员表字段确定
+admin_table{
+	user char,
+	passwd char,
+	role int,
+	datelogin timestamp
+}
+user_conf_table{
+	timelogout int，
+	timestrylogin int
+}
+sqlite3 test.db "create table admin_table(id   integer PRIMARY KEY autoincrement,user varchar(512),passwd  varchar(128), role int, datelogin varchar(64))"
+sqlite3 test.db "insert into admin_table(user, passwd, role, datelogin) values('a','123', 3, '2016-08-23/10:30:30')"
+sqlite3 test.db "select * from admin_table"
+
+sqlite3 test.db "create table user_conf_table(id   integer PRIMARY KEY autoincrement,timelogout int, timestrylogin int)"
+sqlite3 test.db "insert into user_conf_table(timelogout,timestrylogin) values(3, 5)"
+sqlite3 test.db "select * from user_conf_table"

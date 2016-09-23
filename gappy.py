@@ -213,7 +213,7 @@ def route_ajax_checkUser():
 
 
 
-##################### network ########################
+##################### 1.2网络配置 ########################
 # 实现获取网卡信息
 def impl_ajax_getNetworkList(type,filter):
     retobj = {'status':1, 'message':'ok'}
@@ -313,7 +313,7 @@ def route_ajax_setNetworkConfig():
     return jsonify(retobj)
 
 
-##################### IPgroup #########################
+##################### 1.6IP组配置 #########################
 #a IP组查看		test pass
 @app.route('/ajax/data/rule/getIpList')
 def getIpList():
@@ -504,7 +504,7 @@ def deleteIp():
     return jsonify(retobj)
 
 
-##################### route ##########################
+##################### 1.7路由配置 ##########################
 # 实现获取路由信息
 def impl_ajax_getRouterList(type,page,filter):
     retobj = {'status':1, 'message':'ok'}
@@ -711,10 +711,186 @@ def deleteRouter():
     return jsonify(retobj)
     
 
+##################### 1.8管理员配置 ##########################
+# a 管理员列表
+app.route('/ajax/data/device/getAdminList')
+def getAdminList():
+    retobj = {'status':1, 'message':'ok'}
+    page = req_get('page')
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
+    cu = cx.cursor()
+    cu.execute("select * form admin_table")
+    sqlret = cu.fetchall()
+    rows = cu.lastrowid
+    cu.close()
+    cx.close()
+
+    if (int(page)-1)*10>rows:
+        retobj['status'] = 0
+        retobj['message'] = 'page num error'
+        return jsonify(retobj)
+
+    endrow = int(page)*10
+    if rows<=endrow:
+        endrow=rows
+    sqlres = sqlret[(int(page-1)*10):endrow]
+    id=0
+    jrows = []
+    for eachItem in sqlret:
+        jobj = {
+            'name':eachItem[1],
+            'role':eachItem[3],
+            'datelogout':eachItem[4],
+            'id':id
+        }
+        id = id + 1
+        jrows.append(jobj)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# b 添加管理员
+app.route('/ajax/data/device/addAdmin')
+def addAdmin():
+    retobj = {'status':1, 'message':'ok'}
+    data = req_get('data')
+    if (data is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    dataobj = jstrtoobj(data)
+    cmd = "insert into amdin_table(id,user,passwd,role,datalogin) vaiues(NULL,'{u}','{p}',{r},'{d}')""
+    cmd = cmd.format(u=dataobj.name,p=dataobj.password,r=dataobj.role,d='')
+    try:
+        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
+        cu = cx.cursor()
+        cu.execute(cmd)
+        cx.commit()
+        cu.close()
+        cx.close()
+    except:
+        retobj['status'] = 0
+        retobj['message'] = 'sql error'
+        return jsonify(retobj)
+    return jsonify(retobj)
+
+# c 编辑管理员
+app.route('/ajax/data/device/setAdminConfig')
+def setAdminConfig():
+    retobj = {'status':1, 'message':'ok'}
+    data = req_get('data')
+    if (data is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    dataobj = jstrtoobj(data)
+    cmd = "update amdin_table set passwd='{p}',role={r} where user='{u}'"
+    cmd = cmd.format(u=dataobj.name,p=dataobj.password,r=dataobj.role)
+    try:
+        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
+        cu = cx.cursor()
+        cu.execute(cmd)
+        cx.commit()
+        cu.close()
+        cx.close()
+    except:
+        retobj['status'] = 0
+        retobj['message'] = 'sql error'
+        return jsonify(retobj)
+    return jsonify(retobj)
+
+# d 删除管理员
+app.route('/ajax/data/device/deleteAdmin')
+def deleteAdmin():
+    retobj = {'status':1, 'message':'ok'}
+    name = req_get('name')
+    if (name is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = "delete from admin_table where user='{u}'"
+    cmd = cmd.format(u=name)
+    try:
+        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
+        cu = cx.cursor()
+        cu.execute(cmd)
+        cx.commit()
+        cu.close()
+        cx.close()
+    except:
+        retobj['status'] = 0
+        retobj['message'] = 'sql error'
+        return jsonify(retobj)
+    return jsonify(retobj)
+
+# e 检查管理员存在
+app.route('/ajax/data/device/checkAdminName')
+def checkAdminName():
+    retobj = {'status':1, 'message':'ok'}
+    name = req_get('name')
+    if (name is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = "select * from admin_table where user='{u}'"
+    cmd = cmd.format(u=name)
+    try:
+        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
+        cu = cx.cursor()
+        sqlret = cu.execute(cmd)
+        cu.close()
+        cx.close()
+    except:
+        retobj['status'] = 0
+        retobj['message'] = 'sql error'
+        return jsonify(retobj)
+    if len(sqlret)==0:
+         retobj['status'] = 0
+        retobj['message'] = 'user unexist'
+        return jsonify(retobj)
+    return jsonify(retobj)
+
+# f 管理员登录配置
+app.route('/ajax/data/device/saveAdminConfig')
+def saveAdminConfig():
+    retobj = {'status':1, 'message':'ok'}
+    time = req_get('time')
+    num = req_get('num')
+    if (time is None or num is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+
+    cmd1 = "select * from user_conf_table"
+    cmd2 = "insert into user_conf_table(id,timelogout,timestrylogin) values(1,{t},{n})"
+    cmd3 = "update user_conf_table set timelogout={t},timestrylogin={n} where id=1"
+    cmd2 = cmd2.format(t=int(time),n=int(num))
+    cmd3 = cmd3.format(t=int(time),n=int(num))
+    try:
+        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
+        cu = cx.cursor()
+        sqlret = cu.execute(cmd)
+        if len(sqlret)==0:
+            cu.execute(cmd2)
+        else:
+            cu.execute(cmd3)
+        cx.commit()
+        cu.close()
+        cx.close()
+    except:
+        retobj['status'] = 0
+        retobj['message'] = 'sql error'
+        return jsonify(retobj)
+    return jsonify(retobj)
 
 
-##################### 规则管理 ######################
-#  用户分组规则
+
+##################### 2 规则管理 ######################
+##################### 2.1 用户分组规则#################
 def impl_ajax_getGroupList(page):
     retobj = {'status':1, 'message':'ok'}
     type='arbiter'
@@ -983,7 +1159,7 @@ def deleteGroup():
     retobj = vtyresul_to_obj(vtyret)
     return jsonify(retobj)
 
-#2 用户规则
+##################### 2.2 用户规则#####################
 def impl_ajax_getUserList(page):
     retobj = {'status':1, 'message':'ok'}
     type='arbiter'
@@ -1168,7 +1344,7 @@ def deleteUser():
     return jsonify(retobj)
 
 
-#3 IP-MAC规则
+###################### 2.3 IP-MAC规则###################
 def impl_ajax_getIpMacList():
     retobj = {'status':1, 'message':'ok'}
     type='arbiter'
@@ -1308,7 +1484,108 @@ def deleteIpMac():
 
 
 
-##################### 四 事件信息 ######################
+##################### 3 日志信息 ######################
+##################### 3.1 登录日志 ######################
+# a 日志列表
+@app.route('/ajax/data/log/getLoginList')
+def getLoginList():
+    retobj = {'status':1, 'message':'ok'}
+    type='inner'
+    page = req_get('page')
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show login_log stime * etime * user * ip * state * content * pgindex {p} pgsize 10'
+    cmd = cmd.format(p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 6):
+            continue
+        jobj = {
+                'data' : fields[1],
+                'user':fields[3],
+                'ip':fields[2],
+                'status':fields[4],
+                'reason':fields[5]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# b 搜索日志列表
+@app.route('/ajax/data/log/searchLoginList')
+def searchLoginList():
+    retobj = {'status':1, 'message':'ok'}
+    type='inner'
+    ip = req_get('ip')
+    reason = req_get('reason')
+    status = req_get('status')
+    user = req_get('user')
+    starttime = req_get('starttime')
+    endtime = req_get('endtime')
+    page = req_get('page')
+    if ip=='':
+        ip='*'
+    if ip=='':
+        ip='*'
+    if ip=='':
+        ip='*'
+    if ip=='':
+        ip='*'
+    if ip=='':
+        ip='*'
+    if ip=='':
+        ip='*'
+    if ip=='':
+        ip='*'
+    if ip=='':
+        ip='*'
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show login_log stime * etime * user * ip * state * content * pgindex {p} pgsize 10'
+    cmd = cmd.format(p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 6):
+            continue
+        jobj = {
+                'data' : fields[1],
+                'user':fields[3],
+                'ip':fields[2],
+                'status':fields[4],
+                'reason':fields[5]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+
+
+
+##################### 4 事件信息 ######################
 # 1 安全事件
 #  a 事件列表
 @app.route('/ajax/data/event/getSafeList')
@@ -1365,6 +1642,16 @@ def searchSafeList():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     
+
+
+
+
+
+
+
+
+
+
 
 
 
