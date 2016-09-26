@@ -2073,7 +2073,7 @@ def searchAuditList():
 
 
 ##################### 4 事件信息 ######################
-# 1 安全事件
+##################### 4.1 安全事件#####################
 #  a 事件列表
 @app.route('/ajax/data/event/getSafeList')
 def getSafeList():
@@ -2095,17 +2095,17 @@ def getSafeList():
     vtyret = strtrim(vtyret)
     jrows = []
     for line in vtyret.split('\n'):
-        fields = line.split(' ')
+        fields = line.split('|')
         if (len(fields) != 9):
             continue
         jobj = {
+                "id":int(fields[0]),
                 "sourceIp": fields[2],
                 "destIp": fields[3],
                 "proto": fields[5],
                 "date": fields[1],
-                "eventClass": int(fields[6]),
-                "eventSource": type
-#                "state": fields[8],
+                "riskLevel": int(fields[6]),
+                "eventType": type
                 }
         jrows.append(jobj)
     retobj['page'] = page
@@ -2128,17 +2128,105 @@ def searchSafeList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    
+    if sourceIp=='':
+        sourceIp='*'
+    if destIp=='':
+        destIp='*'
+    if proto=='':
+        proto='*'
+    if starttime=='':
+        starttime='1970-01-01/00:00:00'
+    if endtime=='':
+        endtime='2050-01-01/00:00:00'
+    cmd = 'show sec_event_log sip {sip} dip {dip} proto {pr} stime {st} etime {et} pgindex {pg} pgsize 10'
+    cmd = cmd.format(sip=sourceIp,dip=destIp,pr=proto,st=starttime,et=endtime,pg=page)
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 9):
+            continue
+        jobj = {
+                "id":int(fields[0]),
+                "sourceIp": fields[2],
+                "destIp": fields[3],
+                "proto": fields[5],
+                "date": fields[1],
+                "riskLevel": int(fields[6]),
+                "eventType": type
+                }
+        jrows.append(jobj)
+    retobj['page'] = page
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
 
 
+# c 获取事件详情
+@app.route('/ajax/data/event/getSafeConfig')
+def getSafeConfig():
+    retobj = {'status':1, 'message':'ok'}
+    id = req_get('id')
+    page = req_get('page')
+    type = req_get('type')
+    if (id is None or page is None or type is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show sec_event_log sip * dip * proto * stime * etime * pgindex {p} pgsize 10'
+    cmd = cmd.format(p=page)
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (fields[0] != id)):
+            continue
+        jobj = {
+                "rule":int(fields[9]),
+                "packSize": len(fields[8]),
+                "packContent": fields[8],
+                "proto": fields[5],
+                "date": fields[1],
+                "riskLevel": int(fields[6]),
+                "eventType": type
+                }
+        break
+    retobj['data'] = jrows
+    return jsonify(retobj)
 
 
+# d 清空所有事件
+@app.route('/ajax/data/event/clearSafe')
+def clearSafe():
+    retobj = {'status':1, 'message':'ok'}
+    cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
+    cu = cx.cursor()
+    cu.execute("delete form sec_event_table where id>0")
+    cu.execute("update sqlite_sequence set seq=0 where name='sec_event_table'")
 
+    sqlret = cu.fetchall()
+    rows = cu.lastrowid
+    cu.close()
+    cx.close()
 
-
-
-
-
+    if len(sqlret)==0 and rows==0:
+        return jsonify(retobj)
+    else:
+        retobj['status'] = 0
+        retobj['message'] = 'clear sql failed!'
+        return jsonify(retobj)
 
 
 
