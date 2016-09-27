@@ -267,34 +267,34 @@ def route_ajax_getNetworkList():
 def route_ajax_getNetworkConfig():
     retobj = {'status':1, 'message':'ok'}
     type = req_get('type')
-    id = req_get('id')
+    name = req_get('name')
 #debug
 #    type = 'inner'
-#    id = 'P2'
+#    name = 'P2'
 #end
-    if (id is None or type is None):
+    if (name is None or type is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
 
-    retobj = impl_ajax_getNetworkList(type,id)
+    retobj = impl_ajax_getNetworkList(type,name)
     return jsonify(retobj)
 
 # 设置网卡信息	test pass
 @app.route('/ajax/data/device/setNetworkConfig')
 def route_ajax_setNetworkConfig():
     retobj = {'status':1, 'message':'ok'}
-    id = req_get('id')
+    name = req_get('name')
     type = req_get('type')
     data = req_get('data')
 
 #debug
-#    id = 'test'
+#    name = 'test'
 #    type = 'inner'
 #    data = '{"Name":"P2","Ip":"12.12.12.12","NetMask":"6.6.6.6","Vip":"23.23.56.23","Vipmask":"56.231.45.12","gateway":"12.23.56.23"}'
 #end
 
-    if (data is None or id is None or type is None):
+    if (data is None or name is None or type is None):
         print "debug if in"
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
@@ -315,7 +315,7 @@ def route_ajax_setNetworkConfig():
 
 ##################### 1.6IP组配置 #########################
 #a IP组查看		test pass
-@app.route('/ajax/data/rule/getIpList')
+@app.route('/ajax/data/device/getIpList')
 def getIpList():
     retobj = {'status':1, 'message':'ok'}
     page = req_get('page')
@@ -346,7 +346,7 @@ def getIpList():
                 }
         id = id + 1 
         jrows.append(jobj)
-    retobj['page'] = len(jrows)/10 + 1
+    retobj['page'] = page
     retobj['total'] = len(jrows)
     retobj['data'] = jrows
     return jsonify(retobj)
@@ -356,8 +356,7 @@ def getIpList():
 def addIp():
     retobj = {'status':1, 'message':'ok'}
 #    type = req_get('type')
-    ipGroupName = req_get('ipGroupName')
-    ip = req_get('ip')
+    data = req_get('data')
 
 #debug
 #    type = 'inner'
@@ -365,12 +364,13 @@ def addIp():
 #    ip = '55.55.55.55'
 #end
 
-    if ((ipGroupName is None) or (ip is None)):
+    if (data is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
+    dataobj = jstrtoobj(data)
     cmd='ipgroup add name {n} ipset {i}'
-    cmd = cmd.format(n=ipGroupName,i=ip)
+    cmd = cmd.format(n=dataobj.Name,i=dataobj.Ips)
     ut = Util_telnet(promt)
 
     type = 'outer'
@@ -394,12 +394,12 @@ def addIp():
 def  getIpConfig():
     retobj = {'status':1, 'message':'ok'}
 #    type = req_get('type')
-    id = req_get('id')
+    name = req_get('name')
 
 #debug
-#    id = '0'
+#    name = '0'
 #end
-    if (id is None):
+    if (name is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
@@ -412,15 +412,17 @@ def  getIpConfig():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
-    vtyretrow = vtyret.split('\n')[int(id)]
-    grouprow = vtyretrow.split(' ')
-    jrows = []
-    jobj = {
-            'ipGroupName':grouprow[0],
-            'ip':grouprow[1]
+    for line in vtyret.split('\n'):
+        fields = line.split(' ')
+        if (len(fields) != 2 or fields[0]!=name):
+            continue
+        jrows = []
+        jobj = {
+            'ipGroupName':fields[0],
+            'ip':fields[1]
             }
-    print jobj
-    jrows.append(jobj)
+        jrows.append(jobj)
+        break
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -428,21 +430,15 @@ def  getIpConfig():
 @app.route('/ajax/data/device/setIpConfig')
 def setIpConfig():
     retobj = {'status':1, 'message':'ok'}
-#    type = req_get('type')
-    ipGroupName = req_get('ipGroupName')
-    ip = req_get('ip')
+    data = req_get('data')
 
-#debug
-#    ipGroupName = 'group1'
-#    ip = '55.55.55.44'
-#end
-
-    if ((ipGroupName is None) or (ip is None)):
+    if (data is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
+    dataobj = jstrtoobj(data)
     cmd='ipgroup edit name {n} ipset {i}'
-    cmd = cmd.format(n=ipGroupName,i=ip)
+    cmd = cmd.format(n=dataobj.Name,i=dataobj.Ips)
     ut = Util_telnet(promt)
 
     type = 'outer'
@@ -464,31 +460,21 @@ def setIpConfig():
 @app.route('/ajax/data/device/deleteIp')
 def deleteIp():
     retobj = {'status':1, 'message':'ok'}
-#    type = req_get('type')
-    id = req_get('id')
-#debug
-#    id = '0'
-#end
-    if (id is None):
+    name = req_get('name')
+    print name
+
+    if (name is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd='ipgroup view pgindex 0 pgsize 10'
+
+    cmd = 'ipgroup del name {n}'
+    cmd = cmd.format(n=name)
+    print cmd
+    type = 'outer'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
-        retobj['status'] = 0
-        retobj['message'] = 'vty failed'
-        return jsonify(retobj)
-    vtyret = strtrim(vtyret)
-    vtyretrow = vtyret.split('\n')[int(id)]
-    grouprow = vtyretrow.split(' ')
-    ipGroupName = grouprow[0]
-    cmd = 'ipgroup del name {n}'
-    cmd = cmd.format(n=ipGroupName)
-
-    type = 'outer'
-    vtyret = ut.ssl_cmd(type,cmd)
+    
     if (vtyret is None):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
@@ -553,24 +539,7 @@ def route_ajax_getRouterList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    retobj = impl_ajax_getRouterList(type,page,None)
-    return jsonify(retobj)
-
-#d 获取一个路由	test pass
-@app.route('/ajax/data/device/getRouterConfig')
-def getRouterConfig():
-    retobj = {'status':1, 'message':'ok'}
-    type = req_get('type')
-    id = req_get('id')
-#debug
-#    type = 'inner'
-#    id = 'route1'
-#end
-    if (id is None or type is None):
-        retobj['status'] = 0
-        retobj['message'] = 'invalid request'
-        return jsonify(retobj)
-    retobj = impl_ajax_getRouterList(type,0,id)
+    retobj = impl_ajax_getRouterList(type,(int)page,None)
     return jsonify(retobj)
 
 #b 添加一个路由	test pass
@@ -616,12 +585,10 @@ def route_ajax_addRouter():
 def getRouterConfigGroup():
     retobj = {'status':1, 'message':'ok'}
     type = req_get('type')
-    type = req_get('id')
 #debug
 #    type = 'inner'
-#    id = '0'
 #end
-    if (type is None or id is None):
+    if (type is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
@@ -647,6 +614,23 @@ def getRouterConfigGroup():
         id = id + 1 
         jrows.append(jobj)
     retobj['data'] = jrows
+    return jsonify(retobj)
+
+#d 获取一个路由	test pass
+@app.route('/ajax/data/device/getRouterConfig')
+def getRouterConfig():
+    retobj = {'status':1, 'message':'ok'}
+    type = req_get('type')
+    name = req_get('name')
+#debug
+#    type = 'inner'
+#    name = 'route1'
+#end
+    if (name is None or type is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    retobj = impl_ajax_getRouterList(type,0,name)
     return jsonify(retobj)
 
 #e 修改一个路由	test pass
@@ -721,13 +705,18 @@ def getAdminList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
-    cu = cx.cursor()
-    cu.execute("select * form admin_table")
-    sqlret = cu.fetchall()
-    rows = cu.lastrowid
-    cu.close()
-    cx.close()
+    try :
+        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
+        cu = cx.cursor()
+        cu.execute("select * form admin_table")
+        sqlret = cu.fetchall()
+        rows = cu.lastrowid
+        cu.close()
+        cx.close()
+    except:
+        retobj['status'] = 0
+        retobj['message'] = 'sql error'
+        return jsonify(retobj)
 
     if (int(page)-1)*10>rows:
         retobj['status'] = 0
@@ -763,7 +752,7 @@ def addAdmin():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     dataobj = jstrtoobj(data)
-    cmd = "insert into amdin_table(id,user,passwd,role,datalogin) vaiues(NULL,'{u}','{p}',{r},'{d}')""
+    cmd = "insert into amdin_table(id,user,passwd,role,datelogin) vaiues(NULL,'{u}','{p}',{r},'{d}')"
     cmd = cmd.format(u=dataobj.name,p=dataobj.password,r=dataobj.role,d='')
     try:
         cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
@@ -849,7 +838,7 @@ def checkAdminName():
         retobj['message'] = 'sql error'
         return jsonify(retobj)
     if len(sqlret)==0:
-         retobj['status'] = 0
+        retobj['status'] = 0
         retobj['message'] = 'user unexist'
         return jsonify(retobj)
     return jsonify(retobj)
@@ -873,7 +862,7 @@ def saveAdminConfig():
     try:
         cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
         cu = cx.cursor()
-        sqlret = cu.execute(cmd)
+        sqlret = cu.execute(cmd1)
         if len(sqlret)==0:
             cu.execute(cmd2)
         else:
@@ -1007,27 +996,19 @@ def addGroup():
 def getGroupConfig():
     retobj = {'status':1, 'message':'ok'}
     type='arbiter'
-    id = req_get('id')
-#debug
-#    id = '1'
-#end
-    if (id is None):
+    name = req_get('name')
+
+    if (name is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    vtydirc = impl_ajax_getGroupList(0)
-#    print "debug :"
-#    print vtydirc
-#    print vtydirc['data'][int(id)]['id']
+
     retobj['data']=[]
     jobj = {}
-    #先通过前端数据的id找到对应的用户组的 name
-    name = vtydirc['data'][int(id)]['name']
     if name is None:
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    #找到name之后通过group view 过滤 name_HTTP name_FTP name_TDCS的acl项
     ut = Util_telnet(promt)
     cmd = 'group view pgindex 0 pgsize 10'
     vtyret = ut.ssl_cmd(type,cmd)
@@ -1139,17 +1120,13 @@ def deleteGroup():
     retobj = {'status':1, 'message':'ok'}
     type='arbiter'
     ut = Util_telnet(promt)
-    id = req_get('id')
-#debug
-#    id = '0'
-#end
-    if (id is None):
+    name = req_get('name')
+
+    if (name is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-	#根据传入id获取到原组名 ,不等表示更名
-    groupdirc = impl_ajax_getGroupList(0)
-    name = groupdirc['data'][int(id)]['name']
+
     cmd='group del groupname {n}'.format(n=name)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -1211,7 +1188,7 @@ def addUser():
     type='arbiter'
     data = req_get('data')
 #debug
-#    data = '{ "ID": "", "Type": "1", "Name": "u5","UserGroup": "g2", "IP": "[2.2.2.2,2.2.2.5]", "Statue": "1" }'
+#    data = '{"Type": "1", "Name": "u5","UserGroup": "g2", "IP": "[2.2.2.2,2.2.2.5]", "Statue": "1" }'
 #end
     if (data is None):
         retobj['status'] = 0
@@ -1269,19 +1246,17 @@ def getUserConfigGroup():
 def getUserConfig():
     retobj = {'status':1, 'message':'ok'}
     type='arbiter'
-    id = req_get('id')
-#debug
-#    id = '0'
-#end
-    if (id is None):
+    name = req_get('name')
+
+    if (name is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     vtydirc = impl_ajax_getUserList(0)
     retobj['data'] = []
-#    print vtydirc['data']
+
     for eachdata in vtydirc['data']:
-        if (eachdata['id'] == int(id)):
+        if (eachdata['name'] == name):
             retobj['data'].append(eachdata)
     return jsonify(retobj)
 #e 编辑用户		test pass
@@ -1291,7 +1266,7 @@ def setUserConfig():
     type='arbiter'
     data = req_get('data')
 #debug
-#    data = '{ "ID": "", "Type": "1", "Name": "u3","UserGroup": "g2", "IP": "[2.2.2.2,2.2.2.5]", "Statue": "1" }'
+#    data = '{ "Type": "1", "Name": "u3","UserGroup": "g2", "IP": "[2.2.2.2,2.2.2.5]", "Statue": "1" }'
 #end
     if (data is None):
         retobj['status'] = 0
@@ -1320,9 +1295,7 @@ def deleteUser():
     ut = Util_telnet(promt)
     type='arbiter'
     sids = req_get('sids')
-#debug
-#    sids = '[0,2]'
-#end
+
     if (sids is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
@@ -1331,9 +1304,9 @@ def deleteUser():
     sids = sids.replace(']','')
     sids = sids.split(',')
     vtydirc = impl_ajax_getUserList(0)
-    for eachid in sids:
+    for eachname in sids:
         for eachdata in vtydirc['data']:
-            if (eachdata['id'] == int(eachid)):
+            if (eachdata['name'] == eachname):
                 cmd='user del username {username}'.format(username=eachdata['name'])
                 vtyret = ut.ssl_cmd(type,cmd)
                 if (vtyret is None):
@@ -1395,7 +1368,7 @@ def addIpMac():
     type='arbiter'
     data = req_get('data')
 #debug
-#    data = '{ "ID": "", "Name": "d11", "IP": "3.3.3.3", "MAC": "03:66:FE:57:B4:90", "State": "1","Behave":"w" }'
+#    data = '{ "Name": "d11", "IP": "3.3.3.3", "MAC": "03:66:FE:57:B4:90", "State": "1","Behave":"w" }'
 #end
     if (data is None):
         retobj['status'] = 0
@@ -1417,18 +1390,16 @@ def addIpMac():
 def getIpMacConfig():
     retobj = {'status':1, 'message':'ok'}
     type='arbiter'
-    id = req_get('id')
-#debug
-#    id='1'
-#end
-    if (id is None):
+    ip = req_get('ip')
+
+    if (ip is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     vtydirc = impl_ajax_getIpMacList()
     retobj['data'] = []
     for eachdata in vtydirc['data']:
-        if (eachdata['id'] == int(id)):
+        if (eachdata['ip'] == ip):
             retobj['data'].append(eachdata)
     return jsonify(retobj)
 #d 编辑IP-MAC	test pass
@@ -1438,7 +1409,7 @@ def setIpMacConfig():
     type='arbiter'
     data = req_get('data')
 #debug
-#    data = '{ "ID": "1", "Name": "d21", "IP": "3.3.3.3", "MAC": "03:66:FE:57:B4:90", "State": "1","Behave":"w" }'
+#    data = '{"Name": "d21", "IP": "3.3.3.3", "MAC": "03:66:FE:57:B4:90", "State": "1","Behave":"w" }'
 #end
     if (data is None):
         retobj['status'] = 0
@@ -1461,24 +1432,26 @@ def setIpMacConfig():
 def deleteIpMac():
     retobj = {'status':1, 'message':'ok'}
     type='arbiter'
-    id = req_get('id')
-#debug
-#    id='1'
-#end
-    if (id is None):
+    sids = req_get('sids')
+
+    if (sids is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
+    sids = sids.replace('[','')
+    sids = sids.replace(']','')
+    sids = sids.split(',')
     vtydirc = impl_ajax_getIpMacList()
-    for eachdata in vtydirc['data']:
-        if (eachdata['id'] == int(id)):
-            cmd='ipmac del ip {ip}'.format(ip=eachdata['ip'])
-    ut = Util_telnet(promt)
-    vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
-        retobj['status'] = 0
-        retobj['message'] = 'vty failed'
-        return jsonify(retobj)
+    for eachip in sids:
+        for eachdata in vtydirc['data']:
+            if (eachdata['ip'] == eachip):
+                cmd='ipmac del ip {ip}'.format(ip=eachdata['ip'])
+        ut = Util_telnet(promt)
+        vtyret = ut.ssl_cmd(type,cmd)
+        if (vtyret is None):
+            retobj['status'] = 0
+            retobj['message'] = 'vty failed'
+            return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
     return jsonify(retobj)
 
@@ -1581,6 +1554,23 @@ def searchLoginList():
 
 # c 导出日志
 #/ajax/data/log/exportLogin
+@app.route('/ajax/data/log/exportLogin')
+def exportLogin():
+    retobj = {'status':1, 'message':'ok'}
+    type='inner'
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show login_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip * state * content * pgindex 0 pgsize 10'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+
 # d 导出日志路径
 #/ajax/data/log/download/
 
@@ -2036,8 +2026,8 @@ def searchAuditList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd = 'show audit_log stime {st} etime {et} user {u} proto {p} url {ur} content {c} pgindex {p} pgsize 10'
-    cmd = cmd.format(st=starttime,et=endtime,u=user,p=proto,ur=url,c=keyword,p=int(page))
+    cmd = 'show audit_log stime {st} etime {et} user {u} proto {p} url {ur} content {c} pgindex {pg} pgsize 10'
+    cmd = cmd.format(st=starttime,et=endtime,u=user,p=proto,ur=url,c=keyword,pg=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -2191,7 +2181,7 @@ def getSafeConfig():
     jrows = []
     for line in vtyret.split('\n'):
         fields = line.split('|')
-        if (fields[0] != id)):
+        if (fields[0] != id):
             continue
         jobj = {
                 "rule":int(fields[9]),
