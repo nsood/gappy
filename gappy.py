@@ -1496,7 +1496,7 @@ def getLoginList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd = 'show login_log stime * etime * user * ip * state * content * pgindex {p} pgsize 10'
+    cmd = 'show login_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip * state * content * pgindex {p} pgsize 10'
     cmd = cmd.format(p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
@@ -1537,26 +1537,23 @@ def searchLoginList():
     page = req_get('page')
     if ip=='':
         ip='*'
-    if ip=='':
-        ip='*'
-    if ip=='':
-        ip='*'
-    if ip=='':
-        ip='*'
-    if ip=='':
-        ip='*'
-    if ip=='':
-        ip='*'
-    if ip=='':
-        ip='*'
-    if ip=='':
-        ip='*'
+    if reason=='':
+        reason='*'
+    if status=='':
+        status='*'
+    if user=='':
+        user='*'
+    if starttime=='':
+        starttime='1970-01-01/00:00:00'
+    if endtime=='':
+        endtime='2050-01-01/00:00:00'
+
     if (page is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd = 'show login_log stime * etime * user * ip * state * content * pgindex {p} pgsize 10'
-    cmd = cmd.format(p=int(page))
+    cmd = 'show login_log stime {st} etime {et} user {u} ip {i} state {s} content {c} pgindex {p} pgsize 10'
+    cmd = cmd.format(st=starttime,et=endtime,u=user,i=ip,s=status,c=reason,p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -1581,6 +1578,496 @@ def searchLoginList():
     retobj['total'] = len(jrows)
     retobj['data'] = jrows
     return jsonify(retobj)
+
+# c 导出日志
+#/ajax/data/log/exportLogin
+# d 导出日志路径
+#/ajax/data/log/download/
+
+##################### 3.2 操作日志 ######################
+# a 日志列表
+@app.route('/ajax/data/log/getOperList')
+def getOperList():
+    retobj = {'status':1, 'message':'ok'}
+    type='inner'
+    page = req_get('page')
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show op_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip * op * type * pgindex {p} pgsize 10'
+    cmd = cmd.format(p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 6):
+            continue
+        jobj = {
+                'data' : fields[1],
+                'user':fields[3],
+                'ip':fields[2],
+                'behave':fields[4],
+                'type':fields[5]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# b 搜索日志列表
+@app.route('/ajax/data/log/searchOperList')
+def searchOperList():
+    retobj = {'status':1, 'message':'ok'}
+    type='inner'
+    ip = req_get('ip')
+    reason = req_get('reason')
+    behave = req_get('behave')
+    user = req_get('user')
+    starttime = req_get('starttime')
+    endtime = req_get('endtime')
+    page = req_get('page')
+    if ip=='':
+        ip='*'
+    if reason=='':
+        reason='*'
+    if behave=='':
+        behave='*'
+    if user=='':
+        user='*'
+    if starttime=='':
+        starttime='1970-01-01/00:00:00'
+    if endtime=='':
+        endtime='2050-01-01/00:00:00'
+
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show op_log stime {st} etime {et} user {u} ip {i} op {op} type {t} pgindex {p} pgsize 10'
+    cmd = cmd.format(st=starttime,et=endtime,u=user,i=ip,op=behave,t=reason,p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 6):
+            continue
+        jobj = {
+                'data' : fields[1],
+                'user':fields[3],
+                'ip':fields[2],
+                'behave':fields[4],
+                'type':fields[5]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# c 导出日志
+#/ajax/data/log/exportOper
+# d 导出日志路径
+#/ajax/data/log/download/
+
+
+##################### 3.3 系统日志(内端机) ######################
+# a 日志列表
+@app.route('/ajax/data/log/getInnerList')
+def getInnerList():
+    retobj = {'status':1, 'message':'ok'}
+    type='inner'
+    page = req_get('page')
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex {p} pgsize 10'
+    cmd = cmd.format(p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 5):
+            continue
+        jobj = {
+                'date' : fields[1],
+                'model':fields[2],
+                'class':fields[3],
+                'content':fields[4]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# b 搜索日志列表
+@app.route('/ajax/data/log/searchInnerList')
+def searchInnerList():
+    retobj = {'status':1, 'message':'ok'}
+    type='inner'
+    module = req_get('module')
+    level = req_get('class')
+    content = req_get('keyword')
+    starttime = req_get('starttime')
+    endtime = req_get('endtime')
+    page = req_get('page')
+    if module=='':
+        module='*'
+    if level=='':
+        level='*'
+    if content=='':
+        content='*'
+    if starttime=='':
+        starttime='1970-01-01/00:00:00'
+    if endtime=='':
+        endtime='2050-01-01/00:00:00'
+
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module {m} level {l} content {c} pgindex {p} pgsize 10'
+    cmd = cmd.format(st=starttime,et=endtime,m=module,l=level,c=content,p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 5):
+            continue
+        jobj = {
+                'date' : fields[1],
+                'model':fields[2],
+                'class':fields[3],
+                'content':fields[4]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# c 导出日志
+#/ajax/data/log/exportInner
+# d 导出日志路径
+#/ajax/data/log/download/
+
+
+##################### 3.3 系统日志(外端机) ######################
+# a 日志列表
+@app.route('/ajax/data/log/getOuterList')
+def getOuterList():
+    retobj = {'status':1, 'message':'ok'}
+    type='outer'
+    page = req_get('page')
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex {p} pgsize 10'
+    cmd = cmd.format(p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 5):
+            continue
+        jobj = {
+                'date' : fields[1],
+                'model':fields[2],
+                'class':fields[3],
+                'content':fields[4]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# b 搜索日志列表
+@app.route('/ajax/data/log/searchOuterList')
+def searchOuterList():
+    retobj = {'status':1, 'message':'ok'}
+    type='arbiter'
+    module = req_get('module')
+    level = req_get('class')
+    content = req_get('keyword')
+    starttime = req_get('starttime')
+    endtime = req_get('endtime')
+    page = req_get('page')
+    if module=='':
+        module='*'
+    if level=='':
+        level='*'
+    if content=='':
+        content='*'
+    if starttime=='':
+        starttime='1970-01-01/00:00:00'
+    if endtime=='':
+        endtime='2050-01-01/00:00:00'
+
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module {m} level {l} content {c} pgindex {p} pgsize 10'
+    cmd = cmd.format(st=starttime,et=endtime,m=module,l=level,c=content,p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 5):
+            continue
+        jobj = {
+                'date' : fields[1],
+                'model':fields[2],
+                'class':fields[3],
+                'content':fields[4]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# c 导出日志
+#/ajax/data/log/exportOuter
+# d 导出日志路径
+#/ajax/data/log/download/
+
+
+##################### 3.3 系统日志(仲裁机) ######################
+# a 日志列表
+@app.route('/ajax/data/log/getArbiterList')
+def getArbiterList():
+    retobj = {'status':1, 'message':'ok'}
+    type='inner'
+    page = req_get('page')
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex {p} pgsize 10'
+    cmd = cmd.format(p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 5):
+            continue
+        jobj = {
+                'date' : fields[1],
+                'model':fields[2],
+                'class':fields[3],
+                'content':fields[4]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# b 搜索日志列表
+@app.route('/ajax/data/log/searchArbiterList')
+def searchArbiterList():
+    retobj = {'status':1, 'message':'ok'}
+    type='inner'
+    module = req_get('module')
+    level = req_get('class')
+    content = req_get('keyword')
+    starttime = req_get('starttime')
+    endtime = req_get('endtime')
+    page = req_get('page')
+    if module=='':
+        module='*'
+    if level=='':
+        level='*'
+    if content=='':
+        content='*'
+    if starttime=='':
+        starttime='1970-01-01/00:00:00'
+    if endtime=='':
+        endtime='2050-01-01/00:00:00'
+
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module {m} level {l} content {c} pgindex {p} pgsize 10'
+    cmd = cmd.format(st=starttime,et=endtime,m=module,l=level,c=content,p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 5):
+            continue
+        jobj = {
+                'date' : fields[1],
+                'model':fields[2],
+                'class':fields[3],
+                'content':fields[4]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# c 导出日志
+#/ajax/data/log/exportArbiter
+# d 导出日志路径
+#/ajax/data/log/download/
+
+
+##################### 3.4 审计日志  ######################
+# a 日志列表
+@app.route('/ajax/data/log/getAuditList')
+def getAuditList():
+    retobj = {'status':1, 'message':'ok'}
+    type='arbiter'
+    page = req_get('page')
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show audit_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * proto * url * content * pgindex {p} pgsize 10'
+    cmd = cmd.format(p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 6):
+            continue
+        jobj = {
+                'date' : fields[1],
+                'user':fields[2],
+                'proto':fields[3],
+                'url':fields[4],
+                'keyword':fields[5]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# b 搜索日志列表
+@app.route('/ajax/data/log/searchAuditList')
+def searchAuditList():
+    retobj = {'status':1, 'message':'ok'}
+    type='arbiter'
+    url = req_get('url')
+    keyword = req_get('keyword')
+    proto = req_get('proto')
+    user = req_get('user')
+    starttime = req_get('starttime')
+    endtime = req_get('endtime')
+    page = req_get('page')
+    if url=='':
+        url='*'
+    if keyword=='':
+        keyword='*'
+    if proto=='':
+        proto='*'
+    if user=='':
+        user='*'
+    if starttime=='':
+        starttime='1970-01-01/00:00:00'
+    if endtime=='':
+        endtime='2050-01-01/00:00:00'
+
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show audit_log stime {st} etime {et} user {u} proto {p} url {ur} content {c} pgindex {p} pgsize 10'
+    cmd = cmd.format(st=starttime,et=endtime,u=user,p=proto,ur=url,c=keyword,p=int(page))
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if (len(fields) != 6):
+            continue
+        jobj = {
+                'date' : fields[1],
+                'user':fields[2],
+                'proto':fields[3],
+                'url':fields[4],
+                'keyword':fields[5]
+                }
+        jrows.append(jobj)
+    retobj['page'] = int(page)
+    retobj['total'] = len(jrows)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# c 导出日志
+#/ajax/data/log/exportAudit
+# d 导出日志路径
+#/ajax/data/log/download/
+
 
 
 
