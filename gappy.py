@@ -7,7 +7,6 @@ from flask_cors import CORS
 import os, ConfigParser
 import re
 import telnetlib
-import time
 import ssl
 
 outer="goto_outer"
@@ -171,7 +170,12 @@ class Util_telnet(object):
         self.tn.close()
         return s
 
-
+def get_total_num(s):
+    s = s.split(',')
+    s = s[2]
+    s = s.replace('totalline=','')
+    s = s.replace(']','')
+    return int(s)
 ##################### ajax call #####################
 
 #test route
@@ -226,8 +230,11 @@ def impl_ajax_getNetworkList(type,filter):
     vtyret = strtrim(vtyret)
     
     rows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split(' ')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 6):
             continue
         if (filter is not None and fields[0] != filter):
@@ -243,7 +250,7 @@ def impl_ajax_getNetworkList(type,filter):
                 }
         rows.append(jobj)
 
-    retobj['total'] = len(rows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = rows
     return retobj
 
@@ -313,6 +320,79 @@ def route_ajax_setNetworkConfig():
     return jsonify(retobj)
 
 
+##################### 1.4登录配置 #########################
+#a 获取登录配置
+@app.route('/ajax/data/device/getLoginConfig')
+def getLoginConfig():
+    retobj = {'status':1, 'message':'ok'}
+    type = req_get('type')
+    if (type is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    try:
+        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
+        cu = cx.cursor()
+        cu.execute("select * form user_conf_table where id=1")
+        sqlret = cu.fetchall()
+        cu.close()
+        cx.close() 
+    except:
+        retobj['status'] = 0
+        retobj['message'] = 'sql error'
+        return jsonify(retobj)
+    if len(sqlret)==0:
+        retobj['status'] = 0
+        retobj['message'] = 'sql error'
+        return jsonify(retobj)
+    fields = sqlret[0].split(',')
+    data=[]
+    if type=='inner':
+        jobj={
+            'serial':fields[3],
+            'ssh':fields[2]
+        }
+    else:
+        jobj={
+            'serial':fields[5],
+            'ssh':fields[4]
+        }
+    data.append(jobj)
+    retobj['data']=data
+    return jsonify(retobj)
+#b 设置登录配置
+@app.route('/ajax/data/device/setLoginConfig')
+def setLoginConfig():
+    retobj = {'status':1, 'message':'ok'}
+    type = req_get('type')
+    data = req_get('data')
+    if (type is None or data is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    dataobj = jstrtoobj(data)
+    if type=='inner':
+        cmd = "update user_conf_table set inner_ssh={i_s},inner_console={i_c} where id=1"
+    else:
+        cmd = "update user_conf_table set outer_ssh={i_s},outer_console={i_c} where id=1"
+    cmd = cmd.format(i_s=dataobj.ssh,i_c=dataobj.serial)
+    try:
+        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
+        cu = cx.cursor()
+        cu.execute(cmd)
+        sqlret = cu.fetchall()
+        cu.close()
+        cx.close() 
+    except:
+        retobj['status'] = 0
+        retobj['message'] = 'sql error'
+        return jsonify(retobj)
+    if len(sqlret)==0:
+        retobj['status'] = 0
+        retobj['message'] = 'sql error'
+        return jsonify(retobj)
+    return jsonify(retobj)
+
 ##################### 1.6IP组配置 #########################
 #a IP组查看		test pass
 @app.route('/ajax/data/device/getIpList')
@@ -335,8 +415,11 @@ def getIpList():
     vtyret = strtrim(vtyret)
     jrows = []
     id = 0
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split(' ')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 2):
             continue
         jobj = {
@@ -347,7 +430,7 @@ def getIpList():
         id = id + 1 
         jrows.append(jobj)
     retobj['page'] = page
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -503,8 +586,11 @@ def impl_ajax_getRouterList(type,page,filter):
     vtyret = strtrim(vtyret)
 
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split(' ')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 9):
             continue
         if (filter is not None and fields[0] != filter):
@@ -522,7 +608,7 @@ def impl_ajax_getRouterList(type,page,filter):
                 }
         jrows.append(jobj)
 
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return retobj
 
@@ -539,7 +625,7 @@ def route_ajax_getRouterList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    retobj = impl_ajax_getRouterList(type,(int)page,None)
+    retobj = impl_ajax_getRouterList(type,page,None)
     return jsonify(retobj)
 
 #b 添加一个路由	test pass
@@ -683,8 +769,8 @@ def deleteRouter():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    sidsobj = json.loads(sids)
-    for eachRoute in sidsobj:
+    sids = sids.split(',')
+    for eachRoute in sids:
         cmd = 'route del routename {name}'.format(name=eachRoute)
         vtyret = ut.ssl_cmd(type,cmd)
         if (vtyret is None):
@@ -738,7 +824,7 @@ def getAdminList():
         }
         id = id + 1
         jrows.append(jobj)
-    retobj['total'] = len(jrows)
+    retobj['total'] = rows
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -891,11 +977,13 @@ def impl_ajax_getGroupList(page):
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
-
+    totalline = ',,'
     jrows = []
     id = 0
     for line in vtyret.split('\n'):
         fields = line.split(' ')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 1) or len(fields[0])>30:
             continue
         jobj = {
@@ -905,7 +993,7 @@ def impl_ajax_getGroupList(page):
         id = id + 1 
         jrows.append(jobj)
     retobj['page'] = len(jrows)/10 + 1
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return retobj
 #a 用户组列表	test pass
@@ -1151,8 +1239,11 @@ def impl_ajax_getUserList(page):
 #    print "debug : "+ vtyret
     jrows = []
     id=0
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split(' ')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 5):
             continue
         jobj = {
@@ -1166,7 +1257,7 @@ def impl_ajax_getUserList(page):
         id = id + 1 
         jrows.append(jobj)
 
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return retobj
 #a 用户列表查看	test pass
@@ -1228,8 +1319,11 @@ def getUserConfigGroup():
 
     jrows = []
     id = 0
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split(' ')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 1):
             continue
         jobj = {
@@ -1238,7 +1332,7 @@ def getUserConfigGroup():
                 }
         id = id + 1 
         jrows.append(jobj)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 #d 获取用户		test pass
@@ -1338,8 +1432,11 @@ def impl_ajax_getIpMacList():
 #    print "debug 2 :"+vtyret
     jrows = []
     id=0
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split(' ')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 5):
             continue 
         jobj = {
@@ -1353,7 +1450,7 @@ def impl_ajax_getIpMacList():
         id = id + 1
         jrows.append(jobj)
 
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return retobj
 #a IP-MAC列表	test pass
@@ -1479,8 +1576,11 @@ def getLoginList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 6):
             continue
         jobj = {
@@ -1492,7 +1592,7 @@ def getLoginList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -1509,7 +1609,7 @@ def searchLoginList():
     endtime = req_get('endtime')
     page = req_get('page')
     if ip=='':
-        ip='*'
+        ip='0.0.0.0'
     if reason=='':
         reason='*'
     if status=='':
@@ -1520,7 +1620,8 @@ def searchLoginList():
         starttime='1970-01-01/00:00:00'
     if endtime=='':
         endtime='2050-01-01/00:00:00'
-
+    starttime = starttime.replace(' ','/')
+    endtime = endtime.replace(' ','/')
     if (page is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
@@ -1535,8 +1636,11 @@ def searchLoginList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 6):
             continue
         jobj = {
@@ -1548,7 +1652,7 @@ def searchLoginList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -1595,8 +1699,11 @@ def getOperList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 6):
             continue
         jobj = {
@@ -1608,7 +1715,7 @@ def getOperList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -1625,7 +1732,7 @@ def searchOperList():
     endtime = req_get('endtime')
     page = req_get('page')
     if ip=='':
-        ip='*'
+        ip='0.0.0.0'
     if reason=='':
         reason='*'
     if behave=='':
@@ -1636,7 +1743,8 @@ def searchOperList():
         starttime='1970-01-01/00:00:00'
     if endtime=='':
         endtime='2050-01-01/00:00:00'
-
+    starttime = starttime.replace(' ','/')
+    endtime = endtime.replace(' ','/')
     if (page is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
@@ -1651,8 +1759,11 @@ def searchOperList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 6):
             continue
         jobj = {
@@ -1664,7 +1775,7 @@ def searchOperList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -1695,8 +1806,11 @@ def getInnerList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 5):
             continue
         jobj = {
@@ -1707,7 +1821,7 @@ def getInnerList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -1732,7 +1846,8 @@ def searchInnerList():
         starttime='1970-01-01/00:00:00'
     if endtime=='':
         endtime='2050-01-01/00:00:00'
-
+    starttime = starttime.replace(' ','/')
+    endtime = endtime.replace(' ','/')
     if (page is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
@@ -1747,8 +1862,11 @@ def searchInnerList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 5):
             continue
         jobj = {
@@ -1759,7 +1877,7 @@ def searchInnerList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -1790,8 +1908,11 @@ def getOuterList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 5):
             continue
         jobj = {
@@ -1802,7 +1923,7 @@ def getOuterList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -1827,7 +1948,8 @@ def searchOuterList():
         starttime='1970-01-01/00:00:00'
     if endtime=='':
         endtime='2050-01-01/00:00:00'
-
+    starttime = starttime.replace(' ','/')
+    endtime = endtime.replace(' ','/')
     if (page is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
@@ -1842,8 +1964,11 @@ def searchOuterList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 5):
             continue
         jobj = {
@@ -1854,7 +1979,7 @@ def searchOuterList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -1885,8 +2010,11 @@ def getArbiterList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 5):
             continue
         jobj = {
@@ -1897,7 +2025,7 @@ def getArbiterList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -1922,7 +2050,8 @@ def searchArbiterList():
         starttime='1970-01-01/00:00:00'
     if endtime=='':
         endtime='2050-01-01/00:00:00'
-
+    starttime = starttime.replace(' ','/')
+    endtime = endtime.replace(' ','/')
     if (page is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
@@ -1937,8 +2066,11 @@ def searchArbiterList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 5):
             continue
         jobj = {
@@ -1949,7 +2081,7 @@ def searchArbiterList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -1980,8 +2112,11 @@ def getAuditList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 6):
             continue
         jobj = {
@@ -1993,7 +2128,7 @@ def getAuditList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -2026,6 +2161,8 @@ def searchAuditList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
+    starttime = starttime.replace(' ','/')
+    endtime = endtime.replace(' ','/')
     cmd = 'show audit_log stime {st} etime {et} user {u} proto {p} url {ur} content {c} pgindex {pg} pgsize 10'
     cmd = cmd.format(st=starttime,et=endtime,u=user,p=proto,ur=url,c=keyword,pg=int(page))
     ut = Util_telnet(promt)
@@ -2036,8 +2173,11 @@ def searchAuditList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 6):
             continue
         jobj = {
@@ -2049,7 +2189,7 @@ def searchAuditList():
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -2063,8 +2203,56 @@ def searchAuditList():
 
 
 ##################### 4 事件信息 ######################
+# 0 获取事件总数
+def getEventNum(log_table):
+    retobj = {'status':1, 'message':'ok'}
+
+    event_total=0
+    event_today=0
+
+    ut = Util_telnet(promt)
+    cmd = 'show event_num table {log}'.format(log=log_table)
+    type = 'inner'
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = vtyret.replace('\n','')
+    vtyres = vtyret.split(',')
+    event_total += int(vtyres[0].replace('total_num=',''))
+    event_today += int(vtyres[1].replace('today_num=',''))
+
+    type = 'outer'
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = vtyret.replace('\n','')
+    vtyres = vtyret.split(',')
+    event_total += int(vtyres[0].replace('total_num=',''))
+    event_today += int(vtyres[1].replace('today_num=',''))
+
+    type = 'arbiter'
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = vtyret.replace('\n','')
+    vtyres = vtyret.split(',')
+    event_total += int(vtyres[0].replace('total_num=',''))
+    event_today += int(vtyres[1].replace('today_num=',''))
+
+    syseventinfo = {
+        "totalEvent": event_total,
+        "todaySysEvent": event_today
+    }
+    retobj['syseventinfo'] = syseventinfo
+    return jsonify(retobj)
 ##################### 4.1 安全事件#####################
-#  a 事件列表
+# a 事件列表
 @app.route('/ajax/data/event/getSafeList')
 def getSafeList():
     retobj = {'status':1, 'message':'ok'}
@@ -2084,8 +2272,11 @@ def getSafeList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 9):
             continue
         jobj = {
@@ -2099,11 +2290,11 @@ def getSafeList():
                 }
         jrows.append(jobj)
     retobj['page'] = page
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
-#  b 搜索事件列表
+# b 搜索事件列表
 @app.route('/ajax/data/event/searchSafeList')
 def searchSafeList():
     retobj = {'status':1, 'message':'ok'}
@@ -2119,15 +2310,17 @@ def searchSafeList():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     if sourceIp=='':
-        sourceIp='*'
+        sourceIp='0.0.0.0'
     if destIp=='':
-        destIp='*'
+        destIp='0.0.0.0'
     if proto=='':
         proto='*'
     if starttime=='':
         starttime='1970-01-01/00:00:00'
     if endtime=='':
         endtime='2050-01-01/00:00:00'
+    starttime = starttime.replace(' ','/')
+    endtime = endtime.replace(' ','/')
     cmd = 'show sec_event_log sip {sip} dip {dip} proto {pr} stime {st} etime {et} pgindex {pg} pgsize 10'
     cmd = cmd.format(sip=sourceIp,dip=destIp,pr=proto,st=starttime,et=endtime,pg=page)
     ut = Util_telnet(promt)
@@ -2138,8 +2331,11 @@ def searchSafeList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
+    totalline = ',,'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
         if (len(fields) != 9):
             continue
         jobj = {
@@ -2153,7 +2349,7 @@ def searchSafeList():
                 }
         jrows.append(jobj)
     retobj['page'] = page
-    retobj['total'] = len(jrows)
+    retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
     return jsonify(retobj)
 
@@ -2201,23 +2397,143 @@ def getSafeConfig():
 @app.route('/ajax/data/event/clearSafe')
 def clearSafe():
     retobj = {'status':1, 'message':'ok'}
-    cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
-    cu = cx.cursor()
-    cu.execute("delete form sec_event_table where id>0")
-    cu.execute("update sqlite_sequence set seq=0 where name='sec_event_table'")
-
-    sqlret = cu.fetchall()
-    rows = cu.lastrowid
-    cu.close()
-    cx.close()
-
-    if len(sqlret)==0 and rows==0:
-        return jsonify(retobj)
-    else:
+    type = req_get('type')
+    if (type is None):
         retobj['status'] = 0
-        retobj['message'] = 'clear sql failed!'
+        retobj['message'] = 'invalid request'
         return jsonify(retobj)
+    cmd='delete_log table sec_event_log'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    return jsonify(retobj)
 
+
+# e 安全事件总数
+app.route('/ajax/data/event/getEventNumSafe')
+def getEventNumSafe():
+    return getEventNum('sec_event_log')
+# f 导出事件
+
+
+##################### 4.2 系统事件#####################
+#  a 事件列表
+@app.route('/ajax/data/event/getSysList')
+def getSysList():
+    retobj = {'status':1, 'message':'ok'}
+    type = req_get('type')
+    page = req_get('page')
+    if (type is None or page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = 'show sys_event_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 content *  pgindex {p} pgsize 10'
+
+    cmd = cmd.format(p=page)
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    totalline = ',,'
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
+        if (len(fields) != 5):
+            continue
+        jobj = {
+                "id":int(fields[0]),
+                "date": fields[1],
+                "eventClass": fields[2],
+                "eventType": fields[3],
+                "content": fields[4]
+                }
+        jrows.append(jobj)
+    retobj['page'] = page
+    retobj['total'] = get_total_num(totalline)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+#  b 搜索事件列表
+@app.route('/ajax/data/event/searchSysList')
+def searchSysList():
+    retobj = {'status':1, 'message':'ok'}
+    content = req_get('content')
+    starttime = req_get('starttime')
+    endtime = req_get('endtime')
+    page = req_get('page')
+    type = req_get('type')
+    if (page is None or type is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    if content=='':
+        content='*'
+    if starttime=='':
+        starttime='1970-01-01/00:00:00'
+    if endtime=='':
+        endtime='2050-01-01/00:00:00'
+    starttime = starttime.replace(' ','/')
+    endtime = endtime.replace(' ','/')
+    cmd = 'show sys_event_log stime {st} etime {et} content {c}  pgindex {p} pgsize 10'
+    cmd = cmd.format(st=starttime,et=endtime,c=content,pg=page)
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    jrows = []
+    totalline = ',,'
+    for line in vtyret.split('\n'):
+        fields = line.split('|')
+        if len(fields)==1 and len(fields[0])>30:
+            totalline = line
+        if (len(fields) != 5):
+            continue
+        jobj = {
+                "id":int(fields[0]),
+                "date": fields[1],
+                "eventClass": fields[2],
+                "eventType": fields[3],
+                "content": fields[4]
+                }
+        jrows.append(jobj)
+    retobj['page'] = page
+    retobj['total'] = get_total_num(totalline)
+    retobj['data'] = jrows
+    return jsonify(retobj)
+
+# c 清空所有事件
+@app.route('/ajax/data/event/clearSys')
+def clearSys():
+    retobj = {'status':1, 'message':'ok'}
+    type = req_get('type')
+    if (type is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd='delete_log table sys_event_log'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    return jsonify(retobj)
+
+#d 系统事件总数
+app.route('/ajax/data/event/getEventNumSys')
+def getEventNumSys():
+    return getEventNum('sys_event_log')
 
 
 ##################### templates ######################

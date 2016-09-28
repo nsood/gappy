@@ -57,3 +57,14 @@ sqlite3 test.db "select * from admin_table"
 sqlite3 test.db "create table user_conf_table(id   integer PRIMARY KEY autoincrement,timelogout int, timestrylogin int)"
 sqlite3 test.db "insert into user_conf_table(timelogout,timestrylogin) values(3, 5)"
 sqlite3 test.db "select * from user_conf_table"
+
+------------数据库相关---------------------------
+snprintf(cmd, sizeof(cmd), "sqlite3 "DATABASE_CFG"\""SQLITE3_PARAM"create table "USER_CONF_TABLE"(id   integer PRIMARY KEY autoincrement,timelogout int, timestrylogin int,inner_ssh int, inner_console int,outer_ssh int, outer_console int)\"");
+		ret = system(cmd);
+		if (0 != ret){
+			SCLogInfo("Call system failed, cmd=%s", cmd);
+			return -1;
+		}
+		snprintf(cmd, sizeof(cmd), "sqlite3 "DATABASE_CFG"\""SQLITE3_PARAM"insert into "USER_CONF_TABLE"(id,timelogout,timestrylogin,inner_ssh,inner_console,outer_ssh,outer_console) values(1,20,3,0,1,0,1)\"");
+		ret = system(cmd);
+------------数据库相关---------------------------
