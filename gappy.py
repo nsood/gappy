@@ -1,17 +1,13 @@
 #coding=utf-8  
 from flask import Flask, request, render_template, make_response, session, redirect, jsonify
 import json
-#import sqlite3
+import sqlite3
 import time
 from flask_cors import CORS
 import os, ConfigParser
 import re
 import telnetlib
 import ssl
-
-outer="goto_outer"
-inner="goto_inner"
-arbiter="goto_arbiter"
 promt='GLCNS'
 
 app = Flask(__name__)
@@ -65,7 +61,10 @@ def db_exec(sql, args=[], lastid=False):
 # 数据库初始化
 def db_init():
     ret = db_exec('create table users(id integer primary key autoincrement, name varchar)')
-  
+
+
+
+
 # 把字符串里多余的空格、前后空格、前后换行全部移除
 def strtrim(s):
     s = s.strip(' \n')
@@ -166,16 +165,26 @@ class Util_telnet(object):
         s = self.tn.read_until(self.promt+'(app)#', 5)
         cut = s.split('\n')[0]
         s = s.replace(cut+'\n','')
-        s = s.replace('\n'+promt+'(app)#','')
+        s = s.replace(promt+'(app)#','')
         self.tn.close()
         return s
 
 def get_total_num(s):
-    s = s.split(',')
-    s = s[2]
-    s = s.replace('totalline=','')
-    s = s.replace(']','')
-    return int(s)
+    print "debug s: "+s
+    ss = s.split(',')
+    if len(ss)!=3:
+        return 0
+    ss = ss[2]
+    if ss==']':
+        return 0
+    ss = ss.replace('totalline=','')
+    ss = ss.split('\n')[0]
+    ss = ss.split(']')[0]
+    try:
+        ints = int(ss)
+        return ints
+    except:
+        return 0
 ##################### ajax call #####################
 
 #test route
@@ -192,30 +201,6 @@ def test():
     print 'vtyret '+vtyret+'\n'
     return "test return"
 
-#响应登陆请求
-@app.route('/ajax/data/user/checkUser')
-def route_ajax_checkUser():
-    retobj = {'status':1, 'message':'ok'}
-    
-    username = req_get('username')
-    password = req_get('pw')
-    if (username is None or password is None):
-        retobj['message'] = 'invalid request'
-        return jsonify(retobj)
-
-    session_set('user', username)
-
-    logininfo = {
-            'lastLogin':time.strftime('%Y-%m-%d %H:%M:%S'),
-            'logouttime':30,
-            'userId':1,
-            'username':username
-            }
-    retobj['status'] = 2
-    retobj['login_info'] = logininfo
-    return jsonify(retobj)
-
-
 
 ##################### 1.2网络配置 ########################
 # 实现获取网卡信息
@@ -230,11 +215,9 @@ def impl_ajax_getNetworkList(type,filter):
     vtyret = strtrim(vtyret)
     
     rows = []
-    totalline = ',,'
+
     for line in vtyret.split('\n'):
         fields = line.split(' ')
-        if len(fields)==1 and len(fields[0])>30:
-            totalline = line
         if (len(fields) != 6):
             continue
         if (filter is not None and fields[0] != filter):
@@ -250,7 +233,7 @@ def impl_ajax_getNetworkList(type,filter):
                 }
         rows.append(jobj)
 
-    retobj['total'] = get_total_num(totalline)
+    retobj['total'] = len(rows)
     retobj['data'] = rows
     return retobj
 
@@ -294,6 +277,7 @@ def route_ajax_setNetworkConfig():
     name = req_get('name')
     type = req_get('type')
     data = req_get('data')
+    operate = req_get('operate')
 
 #debug
 #    name = 'test'
@@ -301,14 +285,14 @@ def route_ajax_setNetworkConfig():
 #    data = '{"Name":"P2","Ip":"12.12.12.12","NetMask":"6.6.6.6","Vip":"23.23.56.23","Vipmask":"56.231.45.12","gateway":"12.23.56.23"}'
 #end
 
-    if (data is None or name is None or type is None):
+    if (data is None or name is None or type is None or operate is None):
         print "debug if in"
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     dataobj = jstrtoobj(data)
-    cmd = "interface edit ifname {n} ip {i} mask {m} vip {vip} vmask {vmask} gateway {g}"
-    cmd = cmd.format(n=dataobj.Name,i=dataobj.Ip,m=dataobj.NetMask,vip=dataobj.Vip,vmask=dataobj.Vipmask,g=dataobj.gateway)
+    cmd = "interface {opt} ifname {n} ip {i} mask {m} vip {vip} vmask {vmask} gateway {g}"
+    cmd = cmd.format(opt=operate,n=dataobj.Name,i=dataobj.Ip,m=dataobj.NetMask,vip=dataobj.Vip,vmask=dataobj.Vipmask,g=dataobj.gateway)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -318,6 +302,13 @@ def route_ajax_setNetworkConfig():
     retobj = vtyresul_to_obj(vtyret)
     print retobj
     return jsonify(retobj)
+
+
+##################### 1.3双机热备 #########################
+# a 获取热备数据
+
+# b 设置热备参数
+
 
 
 ##################### 1.4登录配置 #########################
@@ -591,13 +582,14 @@ def impl_ajax_getRouterList(type,page,filter):
         fields = line.split(' ')
         if len(fields)==1 and len(fields[0])>30:
             totalline = line
+            print "debug:"+totalline
         if (len(fields) != 9):
             continue
         if (filter is not None and fields[0] != filter):
             continue
         jobj = {
                 'name':fields[0],
-                'protocol':[fields[1]],
+                'protocol':fields[1],
                 'srcIp':fields[2],
                 'srcPort':fields[3],
                 'aimIp':fields[4],
@@ -783,7 +775,7 @@ def deleteRouter():
 
 ##################### 1.8管理员配置 ##########################
 # a 管理员列表
-app.route('/ajax/data/device/getAdminList')
+@app.route('/ajax/data/device/getAdminList')
 def getAdminList():
     retobj = {'status':1, 'message':'ok'}
     page = req_get('page')
@@ -829,7 +821,7 @@ def getAdminList():
     return jsonify(retobj)
 
 # b 添加管理员
-app.route('/ajax/data/device/addAdmin')
+@app.route('/ajax/data/device/addAdmin')
 def addAdmin():
     retobj = {'status':1, 'message':'ok'}
     data = req_get('data')
@@ -854,7 +846,7 @@ def addAdmin():
     return jsonify(retobj)
 
 # c 编辑管理员
-app.route('/ajax/data/device/setAdminConfig')
+@app.route('/ajax/data/device/setAdminConfig')
 def setAdminConfig():
     retobj = {'status':1, 'message':'ok'}
     data = req_get('data')
@@ -879,7 +871,7 @@ def setAdminConfig():
     return jsonify(retobj)
 
 # d 删除管理员
-app.route('/ajax/data/device/deleteAdmin')
+@app.route('/ajax/data/device/deleteAdmin')
 def deleteAdmin():
     retobj = {'status':1, 'message':'ok'}
     name = req_get('name')
@@ -903,7 +895,7 @@ def deleteAdmin():
     return jsonify(retobj)
 
 # e 检查管理员存在
-app.route('/ajax/data/device/checkAdminName')
+@app.route('/ajax/data/device/checkAdminName')
 def checkAdminName():
     retobj = {'status':1, 'message':'ok'}
     name = req_get('name')
@@ -930,7 +922,7 @@ def checkAdminName():
     return jsonify(retobj)
 
 # f 管理员登录配置
-app.route('/ajax/data/device/saveAdminConfig')
+@app.route('/ajax/data/device/saveAdminConfig')
 def saveAdminConfig():
     retobj = {'status':1, 'message':'ok'}
     time = req_get('time')
@@ -1121,7 +1113,6 @@ def getGroupConfig():
         fields = line.split(' ')
         if fields[0]==name+'_TDCS':
                 tdcsAccess=fields[2]
-#               ftpDirection=fields[3]
                 tdcsAddress=fields[4]
                 tdcsIps=fields[5]
         elif fields[0]==name+'_FTP':
@@ -2536,6 +2527,384 @@ def getEventNumSys():
     return getEventNum('sys_event_log')
 
 
+
+##################### 7 用户登录 #####################
+# 获取用户名密码，验证数据库登录，设置登录配置相关
+@app.route('/ajax/data/user/checkUser')
+def checkUser():
+    retobj = {'status':1, 'message':'ok'}
+    
+    username = req_get('username')
+    password = req_get('pw')
+    if (username is None or password is None):
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    
+
+
+#----------------------------------------------------------add by zqzhang----------------------------------------------------------
+#私有函数，获取total line
+def __get_totalline(s):
+    line = s.strip('[]')
+    field = line.split(',')
+    field = field[2].split('=')
+    return field[1]
+
+#私有函数，查询会话统计
+def __select_session(proto,inip,outip,user,page,pagesize=10,mach='inner'):
+    if (len(inip) == 0):
+        inip = '0.0.0.0'
+    if (len(outip) == 0):
+        outip = '0.0.0.0'
+    if (len(user) == 0):
+        user = '*'
+    retobj = {'page':1, 'data':[],'total':0}
+    if (inip is None or outip is None or user is None or page is None):
+        return retobj
+    cmd='show session proto {p} user {u} sip {s} dip {d} pgindex {pi} pgsize {ps}'
+    cmd = cmd.format(p=proto,u=user,s=outip,d=inip,pi=page,ps=pagesize)
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(mach, cmd)
+    if (vtyret is None):
+        return retobj      
+    vtyret = strtrim(vtyret)
+    jrows = []
+    id=0
+    for line in vtyret.split('\n'):
+        fields = line.split(' ')
+        if (len(fields) != 12):
+            retobj['total'] = __get_totalline(line)
+            continue 
+        jobj = {
+          'sessionId': fields[0],
+          'name': fields[1],
+          'state': fields[2],
+          'date': fields[3],
+          'outIp': fields[4],
+          'outPort': fields[5],
+          'inIp': fields[6],
+          'inPort': fields[7],
+          'outRecv': fields[8],
+          'outSend': fields[9],
+          'inRecv': fields[10],
+          'inSend': fields[11]
+                }
+        id = id + 1
+        jrows.append(jobj)
+    retobj['data'] = jrows
+    retobj['page'] = page
+    return retobj
+
+#查询所有HTTP会话
+@app.route('/ajax/data/session/getHttpList')
+def getHttpList():
+    proto = 'HTTP'
+    inip = '0.0.0.0'
+    outip = '0.0.0.0'
+    user = '*'
+    page = req_get('page')
+    retobj = __select_session(proto, inip, outip, user, page)
+    return jsonify(retobj)
+
+
+#按条件查询HTTP会话
+@app.route('/ajax/data/session/searchHttpList')
+def searchHttpList():
+    proto = 'HTTP'
+    inip = req_get('inip')
+    outip = req_get('outip')
+    user = req_get('user')
+    page = req_get('page')
+    retobj = __select_session(proto, inip, outip, user, page)
+    return jsonify(retobj)
+
+#查询所有FTP会话
+@app.route('/ajax/data/session/getFtpList')
+def getFtpList():
+    proto = 'FTP'
+    inip = '0.0.0.0'
+    outip = '0.0.0.0'
+    user = '*'
+    page = req_get('page')
+    retobj = __select_session(proto, inip, outip, user, page)
+    return jsonify(retobj)
+
+#按条件查询FTP会话
+@app.route('/ajax/data/session/searchFtpList')
+def searchFtpList():
+    proto = 'FTP'
+    inip = req_get('inip')
+    outip = req_get('outip')
+    user = req_get('user')
+    page = req_get('page')
+    retobj = __select_session(proto, inip, outip, user, page)
+    return jsonify(retobj)
+
+#查询所有TDCS会话
+@app.route('/ajax/data/session/getTdcsList')
+def getTdcsList():
+    proto = 'TDCS'
+    inip = '0.0.0.0'
+    outip = '0.0.0.0'
+    user = '*'
+    page = req_get('page')
+    retobj = __select_session(proto, inip, outip, user, page)
+    return jsonify(retobj)
+
+#按条件查询TDCS会话
+@app.route('/ajax/data/session/searchTdcsList')
+def searchTdcsList():
+    proto = 'TDCS'
+    inip = req_get('inip')
+    outip = req_get('outip')
+    user = req_get('user')
+    page = req_get('page')
+    retobj = __select_session(proto, inip, outip, user, page)
+    return jsonify(retobj)
+
+#查询所有HTTPS会话
+@app.route('/ajax/data/session/getHttpsList')
+def getHttpsList():
+    proto = 'HTTPS'
+    inip = '0.0.0.0'
+    outip = '0.0.0.0'
+    user = '*'
+    page = req_get('page')
+    retobj = __select_session(proto, inip, outip, user, page)
+    return jsonify(retobj)
+
+#按条件查询HTTPS会话
+@app.route('/ajax/data/session/searchHttpsList')
+def searchHttpsList():
+    proto = 'HTTPS'
+    inip = req_get('inip')
+    outip = req_get('outip')
+    user = req_get('user')
+    page = req_get('page')
+    retobj = __select_session(proto, inip, outip, user, page)
+    return jsonify(retobj)
+
+#获取系统时间和运行时间，（获取内端机系统时间即可，用来表示网闸的系统时间）
+@app.route('/ajax/data/home/getSysTime')
+def getSysTime():
+    mach = 'inner'
+    systime = time.strftime("%Y-%m-%d %H:%M:%S",time.localtime(time.time()))
+    runtime = ''
+    retobj = {'systime':systime, 'runtime':runtime}
+    cmd='show status'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(mach, cmd)
+    if (vtyret is None):
+        return jsonify(retobj)       
+
+    vtyret = strtrim(vtyret)
+    for line in vtyret.split('\n'):
+        fields = line.split('=')
+        if (fields[0] == 'Time'):
+            systime = fields[1]
+        if (fields[0] == 'Runtime'):
+            runtime = fields[1]
+
+    retobj['systime'] = systime
+    retobj['runtime'] = runtime
+    return jsonify(retobj)    
+
+#私有函数，获取指定机器的基础状态
+def __get_machstate(mach):
+    retobj = {'data':[{}]}
+    cmd='show status'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(mach, cmd)
+    if (vtyret is None):
+        return jsonify(retobj) 
+
+    vtyret = strtrim(vtyret)
+    if (mach == 'arbiter'):
+        totalevents = 0
+        todayevents = 0
+        for line in vtyret.split('\n'):
+            fields = line.split('=')
+            if (fields[0] == 'Cpu'):
+                retobj['data'][0]['cpuState'] = fields[1]
+            elif (fields[0] == 'Mem'):
+                retobj['data'][0]['memoryState'] = fields[1]
+            elif (fields[0] == 'Disk'):
+                retobj['data'][0]['diskState'] = fields[1]      
+            elif (fields[0] == 'Total-rules'):
+                retobj['data'][0]['rulesNum'] = fields[1]
+            elif (fields[0] == 'Ha-state'):
+                retobj['data'][0]['deviceState'] = fields[1]
+            elif (fields[0] == 'Service-state'):
+                retobj['data'][0]['serviceState'] = fields[1]
+            elif (fields[0] == 'Today-events'):
+                todayevents = fields[1]
+            elif (fields[0] == 'Total-events'):
+                totalevents = fields[1]
+            elif (fields[0] == 'User-rules'):
+                retobj['data'][0]['authRuleNum'] = fields[1]
+            elif (fields[0] == 'Ipmac-rules'):
+                retobj['data'][0]['ipRuleNum'] = fields[1]
+
+        retobj['data'][0]['todayEventNum'] = todayevents
+        retobj['data'][0]['historyEventNum'] = int(totalevents) - int(todayevents)
+    else:
+        totalevents = '0'
+        todayevents = '0'
+        for line in vtyret.split('\n'):
+            fields = line.split('=')
+            if (fields[0] == 'Cpu'):
+                retobj['data'][0]['cpuState'] = fields[1]
+            elif (fields[0] == 'Mem'):
+                retobj['data'][0]['memoryState'] = fields[1]
+            elif (fields[0] == 'Disk'):
+                retobj['data'][0]['diskState'] = fields[1]      
+            elif (fields[0] == 'Total-rules'):
+                retobj['data'][0]['rulesNum'] = fields[1]
+            elif (fields[0] == 'Ha-state'):
+                retobj['data'][0]['deviceState'] = fields[1]
+            elif (fields[0] == 'Service-state'):
+                retobj['data'][0]['serviceState'] = fields[1]
+            elif (fields[0] == 'Today-events'):
+                todayevents = fields[1]
+            elif (fields[0] == 'Total-events'):
+                totalevents = fields[1]
+            elif (fields[0] == 'P0-state'):
+                retobj['data'][0]['p0LinkState'] = fields[1]
+            elif (fields[0] == 'P1-state'):
+                retobj['data'][0]['p1LinkState'] = fields[1]     
+            elif (fields[0] == 'P2-state'):
+                retobj['data'][0]['p2LinkState'] = fields[1]
+            elif (fields[0] == 'P3-state'):
+                retobj['data'][0]['p3LinkState'] = fields[1] 
+            elif (fields[0] == 'MGMT-state'):
+                retobj['data'][0]['mgmtLinkState'] = fields[1]
+            elif (fields[0] == 'HA-state'):
+                retobj['data'][0]['haLinkState'] = fields[1] 
+
+        retobj['data'][0]['todayEventNum'] = todayevents
+        retobj['data'][0]['historyEventNum'] = int(totalevents) - int(todayevents)
+        retobj['data'][0]['consoleLinkState'] = 1
+
+    return retobj
+
+#私有函数，获取指定机器的接口总流量值(历史流量)
+def __get_traffic(mach):
+    retobj = {'points':[],'timePoints':[]}
+
+    cmd='show traffic'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(mach, cmd)
+    if (vtyret is None):
+        return retobj
+
+    vtyret = strtrim(vtyret)
+    for line in vtyret.split('\n'):
+        fields = line.split(' ')
+        x = time.strftime("%H:%M:%S",time.localtime(int(fields[0])))
+        retobj['timePoints'].append(x)
+        y = round((float(fields[1])+float(fields[2]))*8/1000, 1)
+        retobj['points'].append(y)
+     
+    return retobj
+
+#私有函数，获取指定机器的接口总流量点值(当前流量)
+def __get_traffic_point(mach):
+    retobj = {}
+
+    cmd='show status'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(mach, cmd)
+    if (vtyret is None):
+        return retobj
+
+    vtyret = strtrim(vtyret)
+    for line in vtyret.split('\n'):
+        fields = line.split('=')
+        up = 0.0
+        down = 0.0
+        if (fields[0] == 'traffic-up-bandwidth'):
+            up = float(fields[1])
+        elif (fields[0] == 'traffic-down-bandwidth'):
+            down = float(fields[1])
+        retobj['timePoint'] = time.strftime("%H:%M:%S",time.localtime(time.time()))
+        retobj['point'] = round((up+down)*8/1000, 1)
+    return retobj
+
+#内端机接口总流量值查询
+@app.route('/ajax/data/state/getTotalFlowInner')
+def getTotalFlowInner():
+    mach='inner'
+    retobj = __get_traffic(mach)
+    return jsonify(retobj)
+
+#外端机接口总流量值查询
+@app.route('/ajax/data/state/getTotalFlowOuter')
+def getTotalFlowOuter():
+    mach='outer'
+    retobj = __get_traffic(mach)
+    return jsonify(retobj)
+
+#内端机接口总流量点值查询
+@app.route('/ajax/data/state/getTotalFlowPointInner')
+def getTotalFlowPointInner():
+    mach='inner'
+    retobj = __get_traffic_point(mach)
+    return jsonify(retobj)
+
+#外端机接口总流量点值查询
+@app.route('/ajax/data/state/getTotalFlowPointOuter')
+def getTotalFlowPointOuter():
+    mach='outer'
+    retobj = __get_traffic_point(mach)
+    return jsonify(retobj)
+
+#获取内端机的基础状态
+@app.route('/ajax/data/state/getStateInner')
+def getStateInner():
+    mach='inner'
+    retobj = __get_machstate(mach)
+    return jsonify(retobj)
+
+#获取外端机的基础状态
+@app.route('/ajax/data/state/getStateOuter')
+def getStateOuter():
+    mach='outer'
+    retobj = __get_machstate(mach)
+    return jsonify(retobj)
+
+#获取仲裁机的基础状态
+@app.route('/ajax/data/state/getStateArbiter')
+def getStateArbiter():
+    mach='arbiter'
+    retobj = __get_machstate(mach)
+    return jsonify(retobj)
+
+#获取内端机、外端机、仲裁机设备消息列表
+@app.route('/ajax/data/device/getDeviceInfo')
+def getDeviceInfo():
+    mach = req_get('type')
+    retobj = {'data':[{'devNo':'KED-U1200', 'devType':'', 'SN':'', 'version':''}]}
+
+    cmd='show machinfo'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(mach, cmd)
+    if (vtyret is None):
+        return jsonify(retobj) 
+
+    vtyret = strtrim(vtyret)
+    for line in vtyret.split('\n'):
+        fields = line.split('=')
+        if (fields[0] == 'devNo'):
+            retobj['data'][0]['devNo'] = fields[1]
+        elif (fields[0] == 'devType'):
+            retobj['data'][0]['devType'] = fields[1]
+        elif (fields[0] == 'SN'):
+            retobj['data'][0]['SN'] = fields[1]      
+        elif (fields[0] == 'version'):
+            retobj['data'][0]['version'] = fields[1]
+
+    return jsonify(retobj) 
+#----------------------------------------------------------add by zqzhang----------------------------------------------------------
 ##################### templates ######################
 # 响应页面请求
 @app.route('/')
