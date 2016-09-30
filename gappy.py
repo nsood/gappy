@@ -163,6 +163,7 @@ class Util_telnet(object):
         print "debug cmd : "+cmd
         self.tn.write(cmd+'\r')
         s = self.tn.read_until(self.promt+'(app)#', 5)
+        print "debug util ret:"+s
         cut = s.split('\n')[0]
         s = s.replace(cut+'\n','')
         s = s.replace(promt+'(app)#','')
@@ -406,7 +407,7 @@ def getIpList():
     vtyret = strtrim(vtyret)
     jrows = []
     id = 0
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split(' ')
         if len(fields)==1 and len(fields[0])>30:
@@ -577,7 +578,7 @@ def impl_ajax_getRouterList(type,page,filter):
     vtyret = strtrim(vtyret)
 
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split(' ')
         if len(fields)==1 and len(fields[0])>30:
@@ -969,7 +970,7 @@ def impl_ajax_getGroupList(page):
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
-    totalline = ',,'
+    totalline = '[,,]'
     jrows = []
     id = 0
     for line in vtyret.split('\n'):
@@ -1014,6 +1015,19 @@ def addGroup():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     dataobj = jstrtoobj(data)
+
+    if dataobj.HttpIps=='':
+        HttpIps = '0.0.0.0'
+    else:
+        HttpIps = dataobj.HttpIps
+    if dataobj.FtpIps=='':
+        FtpIps = '0.0.0.0'
+    else:
+        FtpIps = dataobj.FtpIps
+    if dataobj.TDCSIps=='':
+        TDCSIps = '0.0.0.0'
+    else:
+        TDCSIps = dataobj.TDCSIps
 	#1  add group
     ut = Util_telnet(promt)
     cmd='group add groupname {groupname}'
@@ -1025,21 +1039,21 @@ def addGroup():
         return jsonify(retobj)
 	#2  add acl 123
     cmd='acl add index {i} proto {p} access {a} dir {d} rule_mod {m} rule_servers {ss}'
-    cmd = cmd.format(i=dataobj.Name+'_HTTP',p='HTTP',a=dataobj.HttpAccess,d=dataobj.HttpDirection,m=dataobj.HttpAddress,ss=dataobj.HttpIps)
+    cmd = cmd.format(i=dataobj.Name+'_HTTP',p='HTTP',a=dataobj.HttpAccess,d=dataobj.HttpDirection,m=dataobj.HttpAddress,ss=HttpIps)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     cmd='acl add index {i} proto {p} access {a} dir {d} rule_mod {m} rule_servers {ss}'
-    cmd = cmd.format(i=dataobj.Name+'_FTP',p='FTP',a=dataobj.FtpAccess,d=dataobj.FtpDirection,m=dataobj.FtpAddress,ss=dataobj.FtpIps)
+    cmd = cmd.format(i=dataobj.Name+'_FTP',p='FTP',a=dataobj.FtpAccess,d=dataobj.FtpDirection,m=dataobj.FtpAddress,ss=FtpIps)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     cmd='acl add index {i} proto {p} access {a} dir {d} rule_mod {m} rule_servers {ss}'
-    cmd = cmd.format(i=dataobj.Name+'_TDCS',p='TDCS',a=dataobj.TDCSAccess,d='1',m=dataobj.TDCSAddress,ss=dataobj.TDCSIps)
+    cmd = cmd.format(i=dataobj.Name+'_TDCS',p='TDCS',a=dataobj.TDCSAccess,d='1',m=dataobj.TDCSAddress,ss=TDCSIps)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
         retobj['status'] = 0
@@ -1083,12 +1097,7 @@ def getGroupConfig():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
 
-    retobj['data']=[]
-    jobj = {}
-    if name is None:
-        retobj['status'] = 0
-        retobj['message'] = 'invalid request'
-        return jsonify(retobj)
+    jrows=[]
     ut = Util_telnet(promt)
     cmd = 'group view pgindex 0 pgsize 10'
     vtyret = ut.ssl_cmd(type,cmd)
@@ -1097,7 +1106,7 @@ def getGroupConfig():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)    
     vtyret = strtrim(vtyret)
-#    print vtyret
+    print vtyret
     httpAccess=None
     httpDirection=None
     httpAddress=None
@@ -1126,7 +1135,7 @@ def getGroupConfig():
                 httpAddress=fields[4]
                 httpIps=fields[5]
     jobj = {
-        'id':id,
+        'id':'0',
         'name':name,
         'httpAccess':httpAccess,
         'httpDirection':httpDirection,
@@ -1140,7 +1149,10 @@ def getGroupConfig():
         'tdcsAddress':tdcsAddress,
         'tdcsIps':tdcsIps
     }
-    retobj['data'].append(jobj)
+    jrows.append(jobj)
+    print jobj
+    print jrows
+    retobj['data'] = jrows
     return jsonify(retobj)
 #d 编辑用户组	test pass
 @app.route('/ajax/data/rule/setGroupConfig')
@@ -1150,17 +1162,15 @@ def setGroupConfig():
     ut = Util_telnet(promt)
     data = req_get('data')
 #debug
-#    data = '{ "ID": "0", "Name": "g3", "HttpAccess": "1", "HttpDirection": "1", "HttpAddress": "1", "HttpIps": "1.1.1.1", "FtpAccess": "1", "FtpDirection": "1", "FtpAddress": "1", "FtpIps": "2.2.2.2", "TDCSAccess": "1", "TDCSAddress": "1", "TDCSIps": "3.3.3.3" }'
+#    data = '{ "Name": "g3", "HttpAccess": "1", "HttpDirection": "1", "HttpAddress": "1", "HttpIps": "1.1.1.1", "FtpAccess": "1", "FtpDirection": "1", "FtpAddress": "1", "FtpIps": "2.2.2.2", "TDCSAccess": "1", "TDCSAddress": "1", "TDCSIps": "3.3.3.3" }'
 #end
     if (data is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     dataobj = jstrtoobj(data)
-	#根据传入id获取到原组名 ,不等表示更名
-    groupdirc = impl_ajax_getGroupList(0)
-    oldname = groupdirc['data'][int(dataobj.ID)]['name']
-    print "oledname :"+oldname
+
+    oldname = dataobj.oldName
     if (dataobj.Name != oldname):
         cmd = 'group  rename groupname {old} newname {new}'.format(old=oldname,new=dataobj.Name)
         vtyret = ut.ssl_cmd(type,cmd)
@@ -1184,7 +1194,7 @@ def setGroupConfig():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     cmd = 'acl edit index {i} access {a} dir {d} rule_mod {m} rule_servers {ss}'
-    cmd = cmd.format(i=dataobj.Name+'_TDCS',a=dataobj.TDCSAccess,d='1',m=dataobj.TDCSAddress,ss=dataobj.TDCSIps)
+    cmd = cmd.format(i=dataobj.Name+'_TDCS',a=dataobj.TDCSAccess,d='3',m=dataobj.TDCSAddress,ss=dataobj.TDCSIps)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
         retobj['status'] = 0
@@ -1230,18 +1240,31 @@ def impl_ajax_getUserList(page):
 #    print "debug : "+ vtyret
     jrows = []
     id=0
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split(' ')
         if len(fields)==1 and len(fields[0])>30:
             totalline = line
         if (len(fields) != 5):
             continue
+        if fields[4]=='1':
+            fields[4]='encrypt'
+        else:
+            fields[4]='nonencrypt'
+        ips = fields[2].split('-')
+        if len(ips)==1:
+            ips = fields[2]
+        elif len(ips)==2:
+            ips = '{ip1},{ip2}'.format(ip1=ips[0],ip2=ips[1])
+        else:
+            retobj['status'] = 0
+            retobj['message'] = 'ips error'
+            return jsonify(retobj)
         jobj = {
                 'id' : id,
                 'name':fields[0],
                 'usergroup':fields[1],
-                'ip':fields[2],
+                'ip':ips,
                 'disable':fields[3],
                 'type':fields[4]
                 }
@@ -1270,23 +1293,29 @@ def addUser():
     type='arbiter'
     data = req_get('data')
 #debug
-#    data = '{"Type": "1", "Name": "u5","UserGroup": "g2", "IP": "[2.2.2.2,2.2.2.5]", "Statue": "1" }'
+#    data = '{"Type": "1", "Name": "u5","UserGroup": "g2", "IP": "2.2.2.2,2.2.2.5", "Statue": "1" }'
 #end
     if (data is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     dataobj = jstrtoobj(data)
-    ipstr = dataobj.IP.replace('[','')
-    ipstr = ipstr.replace(']','')
-    ip = ipstr.split(',')
-    ips = '{firstIP}-{lastIP}'.format(firstIP=ip[0],lastIP=ip[1])
+    ipstr = dataobj.IP.split(',')
+    if len(ipstr)==2:
+        ips = '{firstIP}-{lastIP}'.format(firstIP=ipstr[0],lastIP=ipstr[1])
+    elif len(ipstr)==1:
+        ips = ipstr[0]
+    if dataobj.Type=='encrypt':
+        Type = '1'
+    else:
+        Type = '0'
 #    print ips
     cmd='user add username {username} groupname {groupname} ip {ip} enable {e} type {t}'
-    cmd = cmd.format(username=dataobj.Name,groupname=dataobj.UserGroup,ip=ips,e=dataobj.Statue,t=dataobj.Type)
+    cmd = cmd.format(username=dataobj.Name,groupname=dataobj.UserGroup,ip=ips,e=dataobj.Statue,t=Type)
 #    print "debug : " + cmd
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
+#    print "debug : " + vtyret
     if (vtyret is None):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
@@ -1310,16 +1339,16 @@ def getUserConfigGroup():
 
     jrows = []
     id = 0
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split(' ')
         if len(fields)==1 and len(fields[0])>30:
             totalline = line
-        if (len(fields) != 1):
+        if (len(fields) != 1) or len(fields[0])>30:
             continue
         jobj = {
                 'id' : id,
-                'group':fields[0],
+                'group':fields[0]
                 }
         id = id + 1 
         jrows.append(jobj)
@@ -1342,6 +1371,10 @@ def getUserConfig():
 
     for eachdata in vtydirc['data']:
         if (eachdata['name'] == name):
+            if eachdata['type']=='1':
+                eachdata['type']='encrypt'
+            else:
+                eachdata['type']='nonencrypt'
             retobj['data'].append(eachdata)
     return jsonify(retobj)
 #e 编辑用户		test pass
@@ -1351,19 +1384,25 @@ def setUserConfig():
     type='arbiter'
     data = req_get('data')
 #debug
-#    data = '{ "Type": "1", "Name": "u3","UserGroup": "g2", "IP": "[2.2.2.2,2.2.2.5]", "Statue": "1" }'
+#    data = '{ "Type": "encrypt", "Name": "u3","UserGroup": "g2", "IP": "[2.2.2.2,2.2.2.5]", "Statue": "1" }'
 #end
     if (data is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     dataobj = jstrtoobj(data)
-    ipstr = dataobj.IP.replace('[','')
-    ipstr = ipstr.replace(']','')
-    ip = ipstr.split(',')
-    ips = '{firstIP}-{lastIP}'.format(firstIP=ip[0],lastIP=ip[1])
+    ipstr = dataobj.IP.split(',')
+    if len(ipstr)==2:
+        ips = '{firstIP}-{lastIP}'.format(firstIP=ipstr[0],lastIP=ipstr[1])
+    elif len(ipstr)==1:
+        ips = ipstr[0]
+
+    if dataobj.Type=='encrypt':
+        Type = '1'
+    else:
+        Type = '0'
     cmd='user edit username {username} groupname {groupname} ip {ip} enable {e} type {t}'
-    cmd = cmd.format(username=dataobj.Name,groupname=dataobj.UserGroup,ip=ips,e=dataobj.Statue,t=dataobj.Type)
+    cmd = cmd.format(username=dataobj.Name,groupname=dataobj.UserGroup,ip=ips,e=dataobj.Statue,t=Type)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -1385,8 +1424,6 @@ def deleteUser():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    sids = sids.replace('[','')
-    sids = sids.replace(']','')
     sids = sids.split(',')
     vtydirc = impl_ajax_getUserList(0)
     for eachname in sids:
@@ -1403,14 +1440,9 @@ def deleteUser():
 
 
 ###################### 2.3 IP-MAC规则###################
-def impl_ajax_getIpMacList():
+def impl_ajax_getIpMacList(page):
     retobj = {'status':1, 'message':'ok'}
     type='arbiter'
-    page=req_get('page')
-    if (page is None):
-        retobj['status'] = 0
-        retobj['message'] = 'invalid request'
-        return jsonify(retobj)
     cmd='ipmac view pgindex {p} pgsize 10'.format(p=page)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
@@ -1423,7 +1455,7 @@ def impl_ajax_getIpMacList():
 #    print "debug 2 :"+vtyret
     jrows = []
     id=0
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split(' ')
         if len(fields)==1 and len(fields[0])>30:
@@ -1447,7 +1479,13 @@ def impl_ajax_getIpMacList():
 #a IP-MAC列表	test pass
 @app.route('/ajax/data/rule/getIpMacList')
 def getIpMacList():
-    retobj = impl_ajax_getIpMacList()
+    retobj = {'status':1, 'message':'ok'}
+    page=req_get('page')
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    retobj = impl_ajax_getIpMacList(page)
     return jsonify(retobj)
 #b IP-MAC添加	test pass
 @app.route('/ajax/data/rule/addIpMac')
@@ -1456,15 +1494,20 @@ def addIpMac():
     type='arbiter'
     data = req_get('data')
 #debug
-#    data = '{ "Name": "d11", "IP": "3.3.3.3", "MAC": "03:66:FE:57:B4:90", "State": "1","Behave":"w" }'
+#    data = '{ "Name": "d11", "IP": "3.3.3.3", "MAC": "03:66:FE:57:B4:90", "State": "1","Behave":"0" }'
 #end
     if (data is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
-        return jsonify(retobj)	
+        return jsonify(retobj)
     dataobj = jstrtoobj(data)
+    if dataobj.Behave=='0':
+        behave = 'b'
+    else:
+        behave = 'w'
     cmd='ipmac add device {name} ip {ip} mac {mac} action {a} enable {e}'
-    cmd = cmd.format(name=dataobj.Name,ip=dataobj.IP,mac=dataobj.MAC,a=dataobj.Behave,e=dataobj.State)
+    cmd = cmd.format(name=dataobj.Name,ip=dataobj.IP,mac=dataobj.MAC,a=behave,e=dataobj.State)
+    print "debug : " + cmd
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -1484,8 +1527,9 @@ def getIpMacConfig():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    vtydirc = impl_ajax_getIpMacList()
-    retobj['data'] = []
+    retobj['data']=[]
+    vtydirc = impl_ajax_getIpMacList(0)
+    print vtydirc
     for eachdata in vtydirc['data']:
         if (eachdata['ip'] == ip):
             retobj['data'].append(eachdata)
@@ -1504,8 +1548,12 @@ def setIpMacConfig():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)	
     dataobj = jstrtoobj(data)
+    if dataobj.Behave=='0':
+        behave = 'b'
+    else:
+        behave = 'w'
     cmd='ipmac edit device {name} ip {ip} mac {mac} action {a} enable {e}'
-    cmd = cmd.format(name=dataobj.Name,ip=dataobj.IP,mac=dataobj.MAC,a=dataobj.Behave,e=dataobj.State)
+    cmd = cmd.format(name=dataobj.Name,ip=dataobj.IP,mac=dataobj.MAC,a=behave,e=dataobj.State)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -1526,20 +1574,19 @@ def deleteIpMac():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    sids = sids.replace('[','')
-    sids = sids.replace(']','')
+    ut = Util_telnet(promt)
     sids = sids.split(',')
-    vtydirc = impl_ajax_getIpMacList()
+    vtydirc = impl_ajax_getIpMacList(0)
     for eachip in sids:
         for eachdata in vtydirc['data']:
             if (eachdata['ip'] == eachip):
                 cmd='ipmac del ip {ip}'.format(ip=eachdata['ip'])
-        ut = Util_telnet(promt)
-        vtyret = ut.ssl_cmd(type,cmd)
-        if (vtyret is None):
-            retobj['status'] = 0
-            retobj['message'] = 'vty failed'
-            return jsonify(retobj)
+                vtyret = ut.ssl_cmd(type,cmd)
+                if (vtyret is None):
+                    retobj['status'] = 0
+                    retobj['message'] = 'vty failed'
+                    return jsonify(retobj)
+                continue
     retobj = vtyresul_to_obj(vtyret)
     return jsonify(retobj)
 
@@ -1567,7 +1614,7 @@ def getLoginList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -1627,7 +1674,7 @@ def searchLoginList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -1690,7 +1737,7 @@ def getOperList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -1750,7 +1797,7 @@ def searchOperList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -1797,7 +1844,7 @@ def getInnerList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -1853,7 +1900,7 @@ def searchInnerList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -1899,7 +1946,7 @@ def getOuterList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -1955,7 +2002,7 @@ def searchOuterList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -2001,7 +2048,7 @@ def getArbiterList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -2057,7 +2104,7 @@ def searchArbiterList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -2103,7 +2150,7 @@ def getAuditList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -2164,7 +2211,7 @@ def searchAuditList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -2263,7 +2310,7 @@ def getSafeList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -2322,7 +2369,7 @@ def searchSafeList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -2432,7 +2479,7 @@ def getSysList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -2483,7 +2530,7 @@ def searchSysList():
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
     jrows = []
-    totalline = ',,'
+    totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
@@ -2536,11 +2583,52 @@ def checkUser():
     
     username = req_get('username')
     password = req_get('pw')
-    if (username is None or password is None):
-        retobj['message'] = 'invalid request'
-        return jsonify(retobj)
-    
+    remote_ip = request.remote_addr
 
+    if (username is None or password is None):
+        retobj['message'] = 'get input data error'
+        retobj['status'] = 0
+        return jsonify(retobj)
+    try:
+        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
+        cu = cx.cursor()
+        cmd = "select * from admin_table where user='name'".format(user=username)
+        cu.execute(cmd)
+        admin_list = cu.fetchall()
+        cu.execute("select * form user_conf_table")
+        user_conf = cu.fetchall()
+    except:
+        retobj['message'] = 'get sql user data error'
+        retobj['status'] = 0
+        return jsonify(retobj)
+    if len(admin_list)==0:
+        retobj['message'] = 'username unexist!'
+        retobj['status'] = 0
+        return jsonify(retobj)
+    else:
+        admin = admin_list[0].split(',')
+        sql_user = admin[1]
+        sql_passwd = admin[2]
+        sql_role = admin[3]
+        sql_datelogin = admin[4]
+        sql_loginerrtimes = int(admin[5])
+    if len(user_conf)!=1:
+        retobj['message'] = 'get sql user conf error'
+        retobj['status'] = 0
+        return jsonify(retobj)
+    else:
+        conf = user_conf[0].split(',')
+        timelogout = int(conf[1])
+        timestrylogin = int(conf[2])
+    #密码字符匹配
+    if password==sql_passwd:
+        session_set('user', username)
+        return jsonify(retobj)
+    else:
+        sql_loginerrtimes += 1
+        retobj['message'] = 'input user passwd error'
+        retobj['status'] = 0
+        return jsonify(retobj)
 
 #----------------------------------------------------------add by zqzhang----------------------------------------------------------
 #私有函数，获取total line
