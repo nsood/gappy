@@ -385,6 +385,83 @@ def setLoginConfig():
         return jsonify(retobj)
     return jsonify(retobj)
 
+
+##################### 1.5 通用设置 #####################
+##################### 1.5.1系统时间 #####################
+#a 获取时间设置
+@app.route('/ajax/data/device/getSysTimeConfig')
+def getSysTimeConfig():
+    retobj = {'status':1, 'message':'ok'}
+    type = 'inner'
+    cmd='show status'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type, cmd)
+    if (vtyret is None):
+        retobj['message'] = 'vty error'
+        retobj['status'] = 0
+        return jsonify(retobj)
+    data = []
+    vtyret = strtrim(vtyret)
+    for line in vtyret.split('\n'):
+        fields = line.split('=')
+        if (fields[0] == 'Time'):
+            jobj = {
+                'systime':fields[1]
+            }
+            data.append(jobj)
+    retobj['data'] = data
+    return jsonify(retobj)
+#b 编辑时间设置 保存数据
+@app.route('/ajax/data/device/setSysTimeConfig')
+def setSysTimeConfig():
+    retobj = {'status':1, 'message':'ok'}
+    type = 'inner'
+    sysTime = req_get('sysTime')
+    serverAddress = req_get('serverAddress')
+    status = req_get('status')
+    ut = Util_telnet(promt)
+
+    if (status=='1' and serverAddress is not None):
+        cmd = 'set ntp {ip}'.format(ip=serverAddress)
+        vtyret = ut.ssl_cmd(type, cmd)
+        if (vtyret is None):
+            retobj['message'] = 'set ntp error'
+            retobj['status'] = 0
+            return jsonify(retobj)
+    elif (status=='0' and sysTime is not None):
+        sysTime = sysTime.replace('-','/')
+        sysTime = sysTime.replace(' ','-')
+        cmd = 'set time {time}'.format(time=sysTime)
+        vtyret = ut.ssl_cmd(type, cmd)
+        if (vtyret is None):
+            retobj['message'] = 'set time error'
+            retobj['status'] = 0
+            return jsonify(retobj)
+    else :
+        retobj['message'] = 'input error'
+        retobj['status'] = 0
+        return jsonify(retobj)
+    return jsonify(retobj)
+##################### 1.5.2证书更新 #####################
+##################### 1.5.3系统升级 #####################
+@app.route('/ajax/data/device/upgradeSystem')
+def upgradeSystem():
+    return
+##################### 1.5.4系统重置 #####################
+#a 恢复出厂设置
+@app.route('/ajax/data/device/updateSystemRestore')
+def updateSystemRestore():
+    return
+#b 重启
+@app.route('/ajax/data/device/updateSystemRestart')
+def updateSystemRestart():
+    return
+#c 关闭
+@app.route('/ajax/data/device/updateSystemClose')
+def updateSystemClose():
+    return
+
+
 ##################### 1.6IP组配置 #########################
 #a IP组查看		test pass
 @app.route('/ajax/data/device/getIpList')
@@ -1763,7 +1840,7 @@ def searchOperList():
     retobj = {'status':1, 'message':'ok'}
     type='inner'
     ip = req_get('ip')
-    reason = req_get('reason')
+    device = req_get('device')
     behave = req_get('behave')
     user = req_get('user')
     starttime = req_get('starttime')
@@ -1771,8 +1848,8 @@ def searchOperList():
     page = req_get('page')
     if ip=='':
         ip='0.0.0.0'
-    if reason=='':
-        reason='*'
+    if device=='':
+        device='*'
     if behave=='':
         behave='*'
     if user=='':
@@ -1788,7 +1865,7 @@ def searchOperList():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     cmd = 'show op_log stime {st} etime {et} user {u} ip {i} op {op} type {t} pgindex {p} pgsize 10'
-    cmd = cmd.format(st=starttime,et=endtime,u=user,i=ip,op=behave,t=reason,p=int(page))
+    cmd = cmd.format(st=starttime,et=endtime,u=user,i=ip,op=behave,t=device,p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -2283,12 +2360,8 @@ def getEventNum(log_table):
     event_total += int(vtyres[0].replace('total_num=',''))
     event_today += int(vtyres[1].replace('today_num=',''))
 
-    syseventinfo = {
-        "totalEvent": event_total,
-        "todaySysEvent": event_today
-    }
-    retobj['syseventinfo'] = syseventinfo
-    return jsonify(retobj)
+    return [event_total,event_today]
+
 ##################### 4.1 安全事件#####################
 # a 事件列表
 @app.route('/ajax/data/event/getSafeList')
@@ -2453,7 +2526,13 @@ def clearSafe():
 # e 安全事件总数
 app.route('/ajax/data/event/getEventNumSafe')
 def getEventNumSafe():
-    return getEventNum('sec_event_log')
+    eventinfo =  getEventNum('sec_event_log')
+    syseventinfo = {
+        "totalEvent": eventinfo[0],
+        "todaySysEvent": eventinfo[1]
+    }
+    retobj['syseventinfo'] = syseventinfo
+    return jsonify(retobj)
 # f 导出事件
 
 
@@ -2540,8 +2619,8 @@ def searchSysList():
         jobj = {
                 "id":int(fields[0]),
                 "date": fields[1],
-                "eventClass": fields[2],
-                "eventType": fields[3],
+                "eventClass": int(fields[2]),
+                "eventType": int(fields[3]),
                 "content": fields[4]
                 }
         jrows.append(jobj)
@@ -2571,7 +2650,13 @@ def clearSys():
 #d 系统事件总数
 app.route('/ajax/data/event/getEventNumSys')
 def getEventNumSys():
-    return getEventNum('sys_event_log')
+    eventinfo = getEventNum('sys_event_log')
+    safeeventinfo = {
+        "totalEvent": eventinfo[0],
+        "todaySafeEvent": eventinfo[1]
+    }
+    retobj['safeeventinfo'] = safeeventinfo
+    return jsonify(retobj)
 
 
 
