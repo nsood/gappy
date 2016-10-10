@@ -1670,6 +1670,35 @@ def deleteIpMac():
 
 
 ##################### 3 日志信息 ######################
+#导出日志
+def export_log(type,cmd,filename):
+    retobj = {'status':1, 'message':'ok'}
+    if (page is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd(type,cmd)
+    if (vtyret is None):
+        retobj['status'] = 0
+        retobj['message'] = 'vty failed'
+        return jsonify(retobj)
+    vtyret = strtrim(vtyret)
+    if not os,path.exists('/download/'):
+        retobj['status'] = 0
+        retobj['message'] = '/download dir unexist'
+        return jsonify(retobj)
+    try:
+        f = open('/download/'+filename,'w')
+        for line in vtyret.split('\n'):
+            f.write(line.replace('|',','))
+        f.close()
+    except:
+        retobj['status'] = 0
+        retobj['message'] = 'write file error'
+        return jsonify(retobj)
+    retobj['filename'] = filename
+    return jsonify(retobj)
 ##################### 3.1 登录日志 ######################
 # a 日志列表
 @app.route('/ajax/data/log/getLoginList')
@@ -1773,25 +1802,14 @@ def searchLoginList():
 
 # c 导出日志
 #/ajax/data/log/exportLogin
+# d 导出日志路径
+#/download/
 @app.route('/ajax/data/log/exportLogin')
 def exportLogin():
-    retobj = {'status':1, 'message':'ok'}
     type='inner'
-    if (page is None):
-        retobj['status'] = 0
-        retobj['message'] = 'invalid request'
-        return jsonify(retobj)
     cmd = 'show login_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip * state * content * pgindex 0 pgsize 10'
-    ut = Util_telnet(promt)
-    vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
-        retobj['status'] = 0
-        retobj['message'] = 'vty failed'
-        return jsonify(retobj)
-    vtyret = strtrim(vtyret)
-
-# d 导出日志路径
-#/ajax/data/log/download/
+    filename = 'log_login.csv'
+    return export_log(type,cmd,filename)
 
 ##################### 3.2 操作日志 ######################
 # a 日志列表
@@ -1897,8 +1915,13 @@ def searchOperList():
 # c 导出日志
 #/ajax/data/log/exportOper
 # d 导出日志路径
-#/ajax/data/log/download/
-
+#/download/
+@app.route('/ajax/data/log/exportOper')
+def exportOper():
+    type='inner'
+    cmd = 'show op_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 op * type * pgindex 0 pgsize 10'
+    filename = 'log_operate.csv'
+    return export_log(type,cmd,filename)
 
 ##################### 3.3 系统日志(内端机) ######################
 # a 日志列表
@@ -1999,7 +2022,13 @@ def searchInnerList():
 # c 导出日志
 #/ajax/data/log/exportInner
 # d 导出日志路径
-#/ajax/data/log/download/
+#/download/
+@app.route('/ajax/data/log/exportInner')
+def exportInner():
+    type='inner'
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 0 pgsize 10'
+    filename = 'log_inner.csv'
+    return export_log(type,cmd,filename)
 
 
 ##################### 3.3 系统日志(外端机) ######################
@@ -2101,8 +2130,13 @@ def searchOuterList():
 # c 导出日志
 #/ajax/data/log/exportOuter
 # d 导出日志路径
-#/ajax/data/log/download/
-
+#/download/
+@app.route('/ajax/data/log/exportOuter')
+def exportOuter():
+    type='outer'
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 0 pgsize 10'
+    filename = 'log_outer.csv'
+    return export_log(type,cmd,filename)
 
 ##################### 3.3 系统日志(仲裁机) ######################
 # a 日志列表
@@ -2203,8 +2237,13 @@ def searchArbiterList():
 # c 导出日志
 #/ajax/data/log/exportArbiter
 # d 导出日志路径
-#/ajax/data/log/download/
-
+#/download/
+@app.route('/ajax/data/log/exportArbiter')
+def exportArbiter():
+    type='arbiter'
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 0 pgsize 10'
+    filename = 'log_arbiter.csv'
+    return export_log(type,cmd,filename)
 
 ##################### 3.4 审计日志  ######################
 # a 日志列表
@@ -2311,10 +2350,13 @@ def searchAuditList():
 # c 导出日志
 #/ajax/data/log/exportAudit
 # d 导出日志路径
-#/ajax/data/log/download/
-
-
-
+#/download/
+@app.route('/ajax/data/log/exportAudit')
+def exportAudit():
+    type='arbiter'
+    cmd = 'show audit_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * proto * url * content * pgindex 0 pgsize 10'
+    filename = 'log_audit.csv'
+    return export_log(type,cmd,filename)
 
 
 ##################### 4 事件信息 ######################
