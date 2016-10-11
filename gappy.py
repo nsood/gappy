@@ -307,7 +307,30 @@ def route_ajax_setNetworkConfig():
 
 ##################### 1.3双机热备 #########################
 # a 获取热备数据
+@app.route('/ajax/data/device/getDoubleConfig')
+def getDoubleConfig():
+    retobj = {'status':1, 'message':'ok'}
+    type = req_get('type')
+    if (type is None):
+        retobj['status'] = 0
+        retobj['message'] = 'invalid request'
+        return jsonify(retobj)
+    cmd = "vtysh -c 'configure terminal' -c 'ha' -c 'show state'"
+    ret = os.popen(cmd).read()
+    if ret=='':
+        retobj['status'] = 0
+        retobj['message'] = 'not get ha information'
+        return jsonify(retobj)
+    ret = strtrim(ret)
+    state = ret.split('\n')
+    rows = len(state)
 
+    if rows<6:
+        retobj['status'] = 0
+        retobj['message'] = 'ha disabled'
+        return jsonify(retobj)
+
+    
 # b 设置热备参数
 
 
@@ -1673,10 +1696,6 @@ def deleteIpMac():
 #导出日志
 def export_log(type,cmd,filename):
     retobj = {'status':1, 'message':'ok'}
-    if (page is None):
-        retobj['status'] = 0
-        retobj['message'] = 'invalid request'
-        return jsonify(retobj)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -1684,7 +1703,7 @@ def export_log(type,cmd,filename):
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
-    if not os,path.exists('/download/'):
+    if not os.path.exists('/download/'):
         retobj['status'] = 0
         retobj['message'] = '/download dir unexist'
         return jsonify(retobj)
@@ -2368,7 +2387,7 @@ def getEventNum(log_table):
     event_today=0
 
     ut = Util_telnet(promt)
-    cmd = 'show event_num table {log}'.format(log=log_table)
+    cmd = 'show_event_num table {log}'.format(log=log_table)
     type = 'inner'
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None):
@@ -2576,7 +2595,17 @@ def getEventNumSafe():
     retobj['syseventinfo'] = syseventinfo
     return jsonify(retobj)
 # f 导出事件
-
+@app.route('/ajax/data/event/exportSafe')
+def exportSafe():
+    retobj = {'status':1, 'message':'ok'}
+    type = req_get('type')
+    if (type is None):
+        retobj['status'] = 0
+        retobj['message'] = 'input type error'
+        return jsonify(retobj)
+    cmd = 'show sec_event_log sip 0.0.0.0 dip 0.0.0.0 proto * stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 pgindex 0 pgsize 10'
+    filename = 'event_safe_'+type+'.csv'
+    return export_log(type,cmd,filename)
 
 ##################### 4.2 系统事件#####################
 #  a 事件列表
@@ -2700,8 +2729,18 @@ def getEventNumSys():
     retobj['safeeventinfo'] = safeeventinfo
     return jsonify(retobj)
 
-
-
+# f 导出事件
+@app.route('/ajax/data/event/exportSys')
+def exportSys():
+    retobj = {'status':1, 'message':'ok'}
+    type = req_get('type')
+    if (type is None):
+        retobj['status'] = 0
+        retobj['message'] = 'input type error'
+        return jsonify(retobj)
+    cmd = 'show sys_event_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 content * pgindex 0 pgsize 10'
+    filename = 'event_sys_'+type+'.csv'
+    return export_log(type,cmd,filename)
 ##################### 7 用户登录 #####################
 # 获取用户名密码，验证数据库登录，设置登录配置相关
 @app.route('/ajax/data/user/checkUser')
