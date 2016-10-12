@@ -209,7 +209,7 @@ def impl_ajax_getNetworkList(type,filter):
     retobj = {'status':1, 'message':'ok'}
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,'interface view')
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return retobj
@@ -296,7 +296,7 @@ def route_ajax_setNetworkConfig():
     cmd = cmd.format(opt=operate,n=dataobj.Name,i=dataobj.Ip,m=dataobj.NetMask,vip=dataobj.Vip,vmask=dataobj.Vipmask,g=dataobj.gateway)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -310,11 +310,6 @@ def route_ajax_setNetworkConfig():
 @app.route('/ajax/data/device/getDoubleConfig')
 def getDoubleConfig():
     retobj = {'status':1, 'message':'ok'}
-    type = req_get('type')
-    if (type is None):
-        retobj['status'] = 0
-        retobj['message'] = 'invalid request'
-        return jsonify(retobj)
     cmd = "vtysh -c 'configure terminal' -c 'ha' -c 'show state'"
     ret = os.popen(cmd).read()
     if ret=='':
@@ -324,13 +319,41 @@ def getDoubleConfig():
     ret = strtrim(ret)
     state = ret.split('\n')
     rows = len(state)
-
     if rows<6:
         retobj['status'] = 0
         retobj['message'] = 'ha disabled'
         return jsonify(retobj)
+    haInner=''
+    haPortInner=''
+    haOuter=''
+    haRole=''
+    prior=''
+    haBackupInner=''
+    haBackupOuter=''
+    haPriorBackup=''
 
-    
+    for line in state:
+        if line.find('init priority')>=0:
+            prior = line.split(' : ')[1]
+        elif line.find('running state')>=0:
+            haRole = line.split(' : ')[1]=='STB' and 1 or 0
+        elif line.find('local ip')>=0:
+            haInner = line.split(' : ')[1]
+        elif line.find('local port')>=0:
+            haPortInner = line.split(' : ')[1]
+        elif line.find('OAU')>=0:
+            line_c = line.split(' ')
+            haOuter = line_c[1]
+        elif line.find('OSU')>=0:
+            line_c = line.split(' ')
+            haBackupOuter = line_c[1]
+            haPriorBackup = int(line_c[3])
+        elif line.find('OA ')>=0:
+            line_c = line.split(' ')
+            haBackupInner = line_c[1]
+        else :
+            continue
+
 # b 设置热备参数
 
 
@@ -419,7 +442,7 @@ def getSysTimeConfig():
     cmd='show status'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type, cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['message'] = 'vty error'
         retobj['status'] = 0
         return jsonify(retobj)
@@ -447,7 +470,7 @@ def setSysTimeConfig():
     if (status=='1' and serverAddress is not None):
         cmd = 'set ntp {ip}'.format(ip=serverAddress)
         vtyret = ut.ssl_cmd(type, cmd)
-        if (vtyret is None):
+        if (vtyret is None or vtyret.find('%')==0):
             retobj['message'] = 'set ntp error'
             retobj['status'] = 0
             return jsonify(retobj)
@@ -456,7 +479,7 @@ def setSysTimeConfig():
         sysTime = sysTime.replace(' ','-')
         cmd = 'set time {time}'.format(time=sysTime)
         vtyret = ut.ssl_cmd(type, cmd)
-        if (vtyret is None):
+        if (vtyret is None or vtyret.find('%')==0):
             retobj['message'] = 'set time error'
             retobj['status'] = 0
             return jsonify(retobj)
@@ -500,7 +523,7 @@ def getIpList():
     cmd='ipgroup view pgindex {p} pgsize 10'.format(p=page)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -550,14 +573,14 @@ def addIp():
 
     type = 'outer'
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
 
     type = 'inner'
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -582,7 +605,7 @@ def  getIpConfig():
     type = 'outer'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -618,14 +641,14 @@ def setIpConfig():
 
     type = 'outer'
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
 
     type = 'inner'
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -650,14 +673,14 @@ def deleteIp():
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
 
     type = 'inner'
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -671,7 +694,7 @@ def impl_ajax_getRouterList(type,page,filter):
     retobj = {'status':1, 'message':'ok'}
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,'route view pgindex {p} pgsize 10'.format(p=page))
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -752,7 +775,7 @@ def route_ajax_addRouter():
 
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -775,7 +798,7 @@ def getRouterConfigGroup():
     cmd='ipgroup view pgindex 0 pgsize 10'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -840,7 +863,7 @@ def setRouterConfig():
                 inport=dataobj.InnerPort)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -866,7 +889,7 @@ def deleteRouter():
     for eachRoute in sids:
         cmd = 'route del routename {name}'.format(name=eachRoute)
         vtyret = ut.ssl_cmd(type,cmd)
-        if (vtyret is None):
+        if (vtyret is None or vtyret.find('%')==0):
             retobj['status'] = 0
             retobj['message'] = 'vty failed'
             return jsonify(retobj)
@@ -880,14 +903,16 @@ def deleteRouter():
 def getAdminList():
     retobj = {'status':1, 'message':'ok'}
     page = req_get('page')
-    if (page is None):
+    role = req_get('role')
+    if (page is None or role is None):
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     try :
         cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
         cu = cx.cursor()
-        cu.execute("select * form admin_table")
+        cmd = "select * form admin_table where role={r}".format(r=int(role))
+        cu.execute(cmd)
         sqlret = cu.fetchall()
         rows = cu.lastrowid
         cu.close()
@@ -956,8 +981,9 @@ def setAdminConfig():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     dataobj = jstrtoobj(data)
-    cmd = "update amdin_table set passwd='{p}',role={r} where user='{u}'"
-    cmd = cmd.format(u=dataobj.name,p=dataobj.password,r=dataobj.role)
+    #cmd = "update amdin_table set passwd='{p}',role={r} where user='{u}'"
+    cmd = "update amdin_table set passwd='{p}' where user='{u}'"
+    cmd = cmd.format(u=dataobj.name,p=dataobj.password)
     try:
         cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
         cu = cx.cursor()
@@ -1065,7 +1091,7 @@ def impl_ajax_getGroupList(page):
     cmd='group view pgindex {p} pgsize 10'.format(p=page)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1133,7 +1159,7 @@ def addGroup():
     cmd='group add groupname {groupname}'
     cmd = cmd.format(groupname=dataobj.Name)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1141,21 +1167,21 @@ def addGroup():
     cmd='acl add index {i} proto {p} access {a} dir {d} rule_mod {m} rule_servers {ss}'
     cmd = cmd.format(i=dataobj.Name+'_HTTP',p='HTTP',a=dataobj.HttpAccess,d=dataobj.HttpDirection,m=dataobj.HttpAddress,ss=HttpIps)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     cmd='acl add index {i} proto {p} access {a} dir {d} rule_mod {m} rule_servers {ss}'
     cmd = cmd.format(i=dataobj.Name+'_FTP',p='FTP',a=dataobj.FtpAccess,d=dataobj.FtpDirection,m=dataobj.FtpAddress,ss=FtpIps)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     cmd='acl add index {i} proto {p} access {a} dir {d} rule_mod {m} rule_servers {ss}'
     cmd = cmd.format(i=dataobj.Name+'_TDCS',p='TDCS',a=dataobj.TDCSAccess,d='1',m=dataobj.TDCSAddress,ss=TDCSIps)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1163,21 +1189,21 @@ def addGroup():
     cmd='group {groupname} bind acl {index}'
     cmd = cmd.format(groupname=dataobj.Name,index=dataobj.Name+'_HTTP')
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     cmd='group {groupname} bind acl {index}'
     cmd = cmd.format(groupname=dataobj.Name,index=dataobj.Name+'_FTP')
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     cmd='group {groupname} bind acl {index}'
     cmd = cmd.format(groupname=dataobj.Name,index=dataobj.Name+'_TDCS')
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1201,7 +1227,7 @@ def getGroupConfig():
     ut = Util_telnet(promt)
     cmd = 'group view pgindex 0 pgsize 10'
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)    
@@ -1274,7 +1300,7 @@ def setGroupConfig():
     if (dataobj.Name != oldname):
         cmd = 'group  rename groupname {old} newname {new}'.format(old=oldname,new=dataobj.Name)
         vtyret = ut.ssl_cmd(type,cmd)
-        if (vtyret is None):
+        if (vtyret is None or vtyret.find('%')==0):
             retobj['status'] = 0
             retobj['message'] = 'vty failed'
             return jsonify(retobj)
@@ -1282,21 +1308,21 @@ def setGroupConfig():
     cmd = 'acl edit index {i} access {a} dir {d} rule_mod {m} rule_servers {ss}'
     cmd = cmd.format(i=dataobj.Name+'_HTTP',a=dataobj.HttpAccess,d=dataobj.HttpDirection,m=dataobj.HttpAddress,ss=dataobj.HttpIps)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     cmd = 'acl edit index {i} access {a} dir {d} rule_mod {m} rule_servers {ss}'
     cmd = cmd.format(i=dataobj.Name+'_FTP',a=dataobj.FtpAccess,d=dataobj.FtpDirection,m=dataobj.FtpAddress,ss=dataobj.FtpIps)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     cmd = 'acl edit index {i} access {a} dir {d} rule_mod {m} rule_servers {ss}'
     cmd = cmd.format(i=dataobj.Name+'_TDCS',a=dataobj.TDCSAccess,d='3',m=dataobj.TDCSAddress,ss=dataobj.TDCSIps)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1318,7 +1344,7 @@ def deleteGroup():
 
     cmd='group del groupname {n}'.format(n=name)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1332,7 +1358,7 @@ def impl_ajax_getUserList(page):
     cmd='user view pgindex {p} pgsize 10'.format(p=page)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1345,7 +1371,7 @@ def impl_ajax_getUserList(page):
         fields = line.split(' ')
         if len(fields)==1 and len(fields[0])>30:
             totalline = line
-        if (len(fields) != 5):
+        if (len(fields) != 6):
             continue
         if fields[4]=='1':
             fields[4]='encrypt'
@@ -1365,8 +1391,9 @@ def impl_ajax_getUserList(page):
                 'name':fields[0],
                 'usergroup':fields[1],
                 'ip':ips,
-                'disable':fields[3],
-                'type':fields[4]
+                'mac':fields[3],
+                'disable':fields[4],
+                'type':fields[5]
                 }
         id = id + 1 
         jrows.append(jobj)
@@ -1393,7 +1420,7 @@ def addUser():
     type='arbiter'
     data = req_get('data')
 #debug
-#    data = '{"Type": "1", "Name": "u5","UserGroup": "g2", "IP": "2.2.2.2,2.2.2.5", "Statue": "1" }'
+#    data = '{"Type": "1", "Name": "u5","UserGroup": "g2", "IP": "2.2.2.2,2.2.2.5","MAC": "11:22:33:44:55:66", "Statue": "1" }'
 #end
     if (data is None):
         retobj['status'] = 0
@@ -1410,13 +1437,13 @@ def addUser():
     else:
         Type = '0'
 #    print ips
-    cmd='user add username {username} groupname {groupname} ip {ip} enable {e} type {t}'
-    cmd = cmd.format(username=dataobj.Name,groupname=dataobj.UserGroup,ip=ips,e=dataobj.Statue,t=Type)
+    cmd='user add username {username} groupname {groupname} ip {ip} mac {m} enable {e} type {t}'
+    cmd = cmd.format(username=dataobj.Name,groupname=dataobj.UserGroup,ip=ips,m=dataobj.MAC,e=dataobj.Statue,t=Type)
 #    print "debug : " + cmd
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
 #    print "debug : " + vtyret
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1431,7 +1458,7 @@ def getUserConfigGroup():
     cmd='group view pgindex 0 pgsize 10'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1484,7 +1511,7 @@ def setUserConfig():
     type='arbiter'
     data = req_get('data')
 #debug
-#    data = '{ "Type": "encrypt", "Name": "u3","UserGroup": "g2", "IP": "[2.2.2.2,2.2.2.5]", "Statue": "1" }'
+#    data = '{ "Type": "encrypt", "Name": "u3","UserGroup": "g2", "IP": "[2.2.2.2,2.2.2.5]", "MAC": "11:22:33:44:55:66","Statue": "1" }'
 #end
     if (data is None):
         retobj['status'] = 0
@@ -1501,11 +1528,11 @@ def setUserConfig():
         Type = '1'
     else:
         Type = '0'
-    cmd='user edit username {username} groupname {groupname} ip {ip} enable {e} type {t}'
-    cmd = cmd.format(username=dataobj.Name,groupname=dataobj.UserGroup,ip=ips,e=dataobj.Statue,t=Type)
+    cmd='user edit username {username} groupname {groupname} ip {ip} mac {m} enable {e} type {t}'
+    cmd = cmd.format(username=dataobj.Name,groupname=dataobj.UserGroup,ip=ips,m=dataobj.MAC,e=dataobj.Statue,t=Type)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1531,7 +1558,7 @@ def deleteUser():
             if (eachdata['name'] == eachname):
                 cmd='user del username {username}'.format(username=eachdata['name'])
                 vtyret = ut.ssl_cmd(type,cmd)
-                if (vtyret is None):
+                if (vtyret is None or vtyret.find('%')==0):
                     retobj['status'] = 0
                     retobj['message'] = 'vty failed'
                     return jsonify(retobj)
@@ -1547,7 +1574,7 @@ def impl_ajax_getIpMacList(page):
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
 #    print "debug 1 :"+vtyret
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1610,7 +1637,7 @@ def addIpMac():
     print "debug : " + cmd
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1656,7 +1683,7 @@ def setIpMacConfig():
     cmd = cmd.format(name=dataobj.Name,ip=dataobj.IP,mac=dataobj.MAC,a=behave,e=dataobj.State)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1682,7 +1709,7 @@ def deleteIpMac():
             if (eachdata['ip'] == eachip):
                 cmd='ipmac del ip {ip}'.format(ip=eachdata['ip'])
                 vtyret = ut.ssl_cmd(type,cmd)
-                if (vtyret is None):
+                if (vtyret is None or vtyret.find('%')==0):
                     retobj['status'] = 0
                     retobj['message'] = 'vty failed'
                     return jsonify(retobj)
@@ -1698,7 +1725,7 @@ def export_log(type,cmd,filename):
     retobj = {'status':1, 'message':'ok'}
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1733,7 +1760,7 @@ def getLoginList():
     cmd = cmd.format(p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1793,7 +1820,7 @@ def searchLoginList():
     cmd = cmd.format(st=starttime,et=endtime,u=user,i=ip,s=status,c=reason,p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1845,7 +1872,7 @@ def getOperList():
     cmd = cmd.format(p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1863,7 +1890,8 @@ def getOperList():
                 'user':fields[3],
                 'ip':fields[2],
                 'behave':fields[4],
-                'type':fields[5]
+                'type':fields[5],
+                'desc':field[6]
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
@@ -1905,7 +1933,7 @@ def searchOperList():
     cmd = cmd.format(st=starttime,et=endtime,u=user,i=ip,op=behave,t=device,p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -1957,7 +1985,7 @@ def getInnerList():
     cmd = cmd.format(p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2013,7 +2041,7 @@ def searchInnerList():
     cmd = cmd.format(st=starttime,et=endtime,m=module,l=level,c=content,p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2065,7 +2093,7 @@ def getOuterList():
     cmd = cmd.format(p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2121,7 +2149,7 @@ def searchOuterList():
     cmd = cmd.format(st=starttime,et=endtime,m=module,l=level,c=content,p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2172,7 +2200,7 @@ def getArbiterList():
     cmd = cmd.format(p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2228,7 +2256,7 @@ def searchArbiterList():
     cmd = cmd.format(st=starttime,et=endtime,m=module,l=level,c=content,p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2279,7 +2307,7 @@ def getAuditList():
     cmd = cmd.format(p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2340,7 +2368,7 @@ def searchAuditList():
     cmd = cmd.format(st=starttime,et=endtime,u=user,p=proto,ur=url,c=keyword,pg=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2390,7 +2418,7 @@ def getEventNum(log_table):
     cmd = 'show_event_num table {log}'.format(log=log_table)
     type = 'inner'
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2401,7 +2429,7 @@ def getEventNum(log_table):
 
     type = 'outer'
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2412,7 +2440,7 @@ def getEventNum(log_table):
 
     type = 'arbiter'
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2438,7 +2466,7 @@ def getSafeList():
     cmd = cmd.format(p=page)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2497,7 +2525,7 @@ def searchSafeList():
     cmd = cmd.format(sip=sourceIp,dip=destIp,pr=proto,st=starttime,et=endtime,pg=page)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2541,7 +2569,7 @@ def getSafeConfig():
     cmd = cmd.format(p=page)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2577,7 +2605,7 @@ def clearSafe():
     cmd='delete_log table sec_event_log'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2623,7 +2651,7 @@ def getSysList():
     cmd = cmd.format(p=page)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2674,7 +2702,7 @@ def searchSysList():
     cmd = cmd.format(st=starttime,et=endtime,c=content,pg=page)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2712,7 +2740,7 @@ def clearSys():
     cmd='delete_log table sys_event_log'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
@@ -2819,7 +2847,7 @@ def __select_session(proto,inip,outip,user,page,pagesize=10,mach='inner'):
     cmd = cmd.format(p=proto,u=user,s=outip,d=inip,pi=page,ps=pagesize)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(mach, cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         return retobj      
     vtyret = strtrim(vtyret)
     jrows = []
@@ -2948,7 +2976,7 @@ def getSysTime():
     cmd='show status'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(mach, cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         return jsonify(retobj)       
 
     vtyret = strtrim(vtyret)
@@ -2969,7 +2997,7 @@ def __get_machstate(mach):
     cmd='show status'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(mach, cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         return jsonify(retobj) 
 
     vtyret = strtrim(vtyret)
@@ -3048,7 +3076,7 @@ def __get_traffic(mach):
     cmd='show traffic'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(mach, cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         return retobj
 
     vtyret = strtrim(vtyret)
@@ -3068,7 +3096,7 @@ def __get_traffic_point(mach):
     cmd='show status'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(mach, cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         return retobj
 
     vtyret = strtrim(vtyret)
@@ -3142,7 +3170,7 @@ def getDeviceInfo():
     cmd='show machinfo'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(mach, cmd)
-    if (vtyret is None):
+    if (vtyret is None or vtyret.find('%')==0):
         return jsonify(retobj) 
 
     vtyret = strtrim(vtyret)
