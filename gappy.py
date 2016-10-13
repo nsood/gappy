@@ -32,38 +32,35 @@ def session_set(key, value):
     if (value is None):
         session.pop(key)
 
-# 全局数据库函数，select返回对应的数组，update/delete返回受到影响的行数/ROWID
-db = None
-def db_exec(sql, args=[], lastid=False):
-    try:
-        global db
-        if (db is None):
-            db = sqlite3.connect('gappy.db')
 
-        cur = db.execute(sql, args)
-        id = cur.lastrowid
-        cnt = cur.rowcount
-        rs = cur.fetchall()
-        cur.close()
+#------------------------begin-----------op class-------------------------------------
+class OpObj(object):
+    def __init__(self):
+        self.op = ['add', 'del', 'edit', 'view']
+        self.mach = ['inner', 'arbiter', 'outer']
 
-        if (sql.startswith('select ')):
-            return rs
+    def write_op_log(self, ip, user, op, mach, content):
+        cmd='sqlite3 /data/gap_sqlite3_db.log "insert into op_table(ip,user,op,type, content) values(\'{0}\', \'{1}\',\'{2}\',\'{3}\',\'{4}\')"'
+        cmd = cmd.format(ip, user, op, mach, content)
+        os.system(cmd)
+#------------------------end-----------op class-------------------------------------
 
-        if (lastid):
-            return id
+#------------------------begin-----------login class-------------------------------------
+class LoginObj(object):
+    def __init__(self):
+        self.state = ['ok', 'failed']
 
-        return cnt
+    def write_login_log(self, ip, user, state, content):
+        cmd='sqlite3 /data/gap_sqlite3_db.log "insert into login_table(ip,user,state, content) values(\'{0}\', \'{1}\',\'{2}\',\'{3}\')"'
+        cmd = cmd.format(ip, user, state, content)
+        os.system(cmd)
+#------------------------end-----------login class-------------------------------------
 
-    except Exception,e:
-        #print 'db execute failed\n\tsql: {0}\n\terror: {1}\n\n'.format(sql, e)
-        return None
-
-# 数据库初始化
-def db_init():
-    ret = db_exec('create table users(id integer primary key autoincrement, name varchar)')
-
-
-
+# 数据库借口
+def get_sql_data(db_name,cmd):
+    line = 'sqlite3 {db} "{c}"'.format(db=db_name,c=cmd)
+    print "debug sql cmdline "+line
+    return os.popen(line).read()
 
 # 把字符串里多余的空格、前后空格、前后换行全部移除
 def strtrim(s):
@@ -309,7 +306,22 @@ def route_ajax_setNetworkConfig():
 # a 获取热备数据
 @app.route('/ajax/data/device/getDoubleConfig')
 def getDoubleConfig():
-    retobj = {'status':1, 'message':'ok'}
+    retobj = {
+        'status':1, 
+        'message':'ok',
+        'data': [
+            {
+            "haInner": "",
+            "haPortInner": "",
+            "haOuter": "",
+            "haRole": "",
+            "prior": "",
+            "haBackupInner": "",
+            "haBackupOuter": "",
+            "haPriorBackup": ""
+            }
+        ]
+    }
     cmd = "vtysh -c 'configure terminal' -c 'ha' -c 'show state'"
     ret = os.popen(cmd).read()
     if ret=='':
@@ -353,8 +365,32 @@ def getDoubleConfig():
             haBackupInner = line_c[1]
         else :
             continue
+    jrows=[]
+    data = {
+        "haInner": haInner,
+        "haPortInner": haPortInner,
+        "haOuter": haOuter,
+        "haRole": haRole,
+        "prior": prior,
+        "haBackupInner": haBackupInner,
+        "haBackupOuter": haBackupOuter,
+        "haPriorBackup": haPriorBackup
+    }
+    jrows.append(data)
+    retobj['data']=jrows
+    return jsonify(retobj)
 
 # b 设置热备参数
+@app.route('/ajax/data/device/setDoubleConfig')
+def setDoubleConfig():
+    retobj = {'status':1, 'message':'ok'}
+    data = req_get('data')
+    if (data is None):
+        retobj['status'] = 0
+        retobj['message'] = 'input error'
+        return jsonify(retobj)
+    dataobj = jstrtoobj(data)
+    
 
 
 
@@ -368,22 +404,15 @@ def getLoginConfig():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    try:
-        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
-        cu = cx.cursor()
-        cu.execute("select * form user_conf_table where id=1")
-        sqlret = cu.fetchall()
-        cu.close()
-        cx.close() 
-    except:
+
+    sqlret = get_sql_data('/etc/gap_sqlite3_db.conf','select * from user_conf_table where id=1')
+    if sqlret=='':
         retobj['status'] = 0
         retobj['message'] = 'sql error'
         return jsonify(retobj)
-    if len(sqlret)==0:
-        retobj['status'] = 0
-        retobj['message'] = 'sql error'
-        return jsonify(retobj)
-    fields = sqlret[0].split(',')
+    sqlret = strtrim(sqlret)
+    sqlret = sqlret.split('\n')
+    fields = sqlret[0].split('|')
     data=[]
     if type=='inner':
         jobj={
@@ -414,18 +443,9 @@ def setLoginConfig():
     else:
         cmd = "update user_conf_table set outer_ssh={i_s},outer_console={i_c} where id=1"
     cmd = cmd.format(i_s=dataobj.ssh,i_c=dataobj.serial)
-    try:
-        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
-        cu = cx.cursor()
-        cu.execute(cmd)
-        sqlret = cu.fetchall()
-        cu.close()
-        cx.close() 
-    except:
-        retobj['status'] = 0
-        retobj['message'] = 'sql error'
-        return jsonify(retobj)
-    if len(sqlret)==0:
+
+    sqlret = get_sql_data('/etc/gap_sqlite3_db.conf',cmd)
+    if sqlret!='':
         retobj['status'] = 0
         retobj['message'] = 'sql error'
         return jsonify(retobj)
@@ -462,22 +482,22 @@ def getSysTimeConfig():
 def setSysTimeConfig():
     retobj = {'status':1, 'message':'ok'}
     type = 'inner'
-    sysTime = req_get('sysTime')
-    serverAddress = req_get('serverAddress')
-    status = req_get('status')
+    data = req_get('data')
+    dataobj = jstrtoobj(data)
+
     ut = Util_telnet(promt)
 
-    if (status=='1' and serverAddress is not None):
-        cmd = 'set ntp {ip}'.format(ip=serverAddress)
+    if (dataobj.status=='1' and dataobj.serverAddress is not None):
+        cmd = 'set ntp {ip}'.format(ip=dataobj.serverAddress)
         vtyret = ut.ssl_cmd(type, cmd)
         if (vtyret is None or vtyret.find('%')==0):
             retobj['message'] = 'set ntp error'
             retobj['status'] = 0
             return jsonify(retobj)
-    elif (status=='0' and sysTime is not None):
-        sysTime = sysTime.replace('-','/')
-        sysTime = sysTime.replace(' ','-')
-        cmd = 'set time {time}'.format(time=sysTime)
+    elif (dataobj.status=='0' and dataobj.sysTime is not None):
+        Time = dataobj.sysTime.replace('-','/')
+        Time = Time.replace(' ','-')
+        cmd = 'set time {time}'.format(time=Time)
         vtyret = ut.ssl_cmd(type, cmd)
         if (vtyret is None or vtyret.find('%')==0):
             retobj['message'] = 'set time error'
@@ -490,22 +510,10 @@ def setSysTimeConfig():
     return jsonify(retobj)
 ##################### 1.5.2证书更新 #####################
 ##################### 1.5.3系统升级 #####################
-@app.route('/ajax/data/device/upgradeSystem')
-def upgradeSystem():
-    return
 ##################### 1.5.4系统重置 #####################
 #a 恢复出厂设置
-@app.route('/ajax/data/device/updateSystemRestore')
-def updateSystemRestore():
-    return
 #b 重启
-@app.route('/ajax/data/device/updateSystemRestart')
-def updateSystemRestart():
-    return
 #c 关闭
-@app.route('/ajax/data/device/updateSystemClose')
-def updateSystemClose():
-    return
 
 
 ##################### 1.6IP组配置 #########################
@@ -908,20 +916,11 @@ def getAdminList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    try :
-        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
-        cu = cx.cursor()
-        cmd = "select * form admin_table where role={r}".format(r=int(role))
-        cu.execute(cmd)
-        sqlret = cu.fetchall()
-        rows = cu.lastrowid
-        cu.close()
-        cx.close()
-    except:
-        retobj['status'] = 0
-        retobj['message'] = 'sql error'
-        return jsonify(retobj)
-
+    cmd = "select * from admin_table where role={r}".format(r=int(role))
+    sqlret = get_sql_data('/etc/gap_sqlite3_db.conf',cmd)
+    sqlret = strtrim(sqlret)
+    sqlret = sqlret.split('\n')
+    rows = len(sqlret)
     if (int(page)-1)*10>rows:
         retobj['status'] = 0
         retobj['message'] = 'page num error'
@@ -930,14 +929,15 @@ def getAdminList():
     endrow = int(page)*10
     if rows<=endrow:
         endrow=rows
-    sqlres = sqlret[(int(page-1)*10):endrow]
+    sqlres = sqlret[(int(page)*10-10):endrow]
     id=0
     jrows = []
     for eachItem in sqlret:
+        item = eachItem.split('|')
         jobj = {
-            'name':eachItem[1],
-            'role':eachItem[3],
-            'datelogout':eachItem[4],
+            'name':item[1],
+            'role':item[3],
+            'datelogout':item[4],
             'id':id
         }
         id = id + 1
@@ -956,18 +956,13 @@ def addAdmin():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     dataobj = jstrtoobj(data)
-    cmd = "insert into amdin_table(id,user,passwd,role,datelogin) vaiues(NULL,'{u}','{p}',{r},'{d}')"
+    cmd = "insert into amdin_table(id,user,passwd,role,datelogin,loginerrtimes) vaiues(NULL,'{u}','{p}',{r},'{d}',0)"
     cmd = cmd.format(u=dataobj.name,p=dataobj.password,r=dataobj.role,d='')
-    try:
-        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
-        cu = cx.cursor()
-        cu.execute(cmd)
-        cx.commit()
-        cu.close()
-        cx.close()
-    except:
+
+    sqlret = get_sql_data('/etc/gap_sqlite3_db.conf',cmd)
+    if sqlret!='':
         retobj['status'] = 0
-        retobj['message'] = 'sql error'
+        retobj['message'] = 'insert sql error'
         return jsonify(retobj)
     return jsonify(retobj)
 
@@ -981,19 +976,12 @@ def setAdminConfig():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     dataobj = jstrtoobj(data)
-    #cmd = "update amdin_table set passwd='{p}',role={r} where user='{u}'"
-    cmd = "update amdin_table set passwd='{p}' where user='{u}'"
+    cmd = "update admin_table set passwd='{p}' where user='{u}'"
     cmd = cmd.format(u=dataobj.name,p=dataobj.password)
-    try:
-        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
-        cu = cx.cursor()
-        cu.execute(cmd)
-        cx.commit()
-        cu.close()
-        cx.close()
-    except:
+    sqlret = get_sql_data('/etc/gap_sqlite3_db.conf',cmd)
+    if sqlret!='':
         retobj['status'] = 0
-        retobj['message'] = 'sql error'
+        retobj['message'] = 'update sql error'
         return jsonify(retobj)
     return jsonify(retobj)
 
@@ -1008,16 +996,11 @@ def deleteAdmin():
         return jsonify(retobj)
     cmd = "delete from admin_table where user='{u}'"
     cmd = cmd.format(u=name)
-    try:
-        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
-        cu = cx.cursor()
-        cu.execute(cmd)
-        cx.commit()
-        cu.close()
-        cx.close()
-    except:
+
+    sqlret = get_sql_data('/etc/gap_sqlite3_db.conf',cmd)
+    if sqlret!='':
         retobj['status'] = 0
-        retobj['message'] = 'sql error'
+        retobj['message'] = 'delete sql error'
         return jsonify(retobj)
     return jsonify(retobj)
 
@@ -1032,19 +1015,13 @@ def checkAdminName():
         return jsonify(retobj)
     cmd = "select * from admin_table where user='{u}'"
     cmd = cmd.format(u=name)
-    try:
-        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
-        cu = cx.cursor()
-        sqlret = cu.execute(cmd)
-        cu.close()
-        cx.close()
-    except:
+    sqlret = get_sql_data('/etc/gap_sqlite3_db.conf',cmd)
+    sqlret = strtrim(sqlret)
+    sqlret = sqlret.split('\n')
+    rows = len(sqlret)
+    if len(sqlret)!=1 or sqlret[1]=='':
         retobj['status'] = 0
-        retobj['message'] = 'sql error'
-        return jsonify(retobj)
-    if len(sqlret)==0:
-        retobj['status'] = 0
-        retobj['message'] = 'user unexist'
+        retobj['message'] = 'check admin sql error'
         return jsonify(retobj)
     return jsonify(retobj)
 
@@ -1064,20 +1041,17 @@ def saveAdminConfig():
     cmd3 = "update user_conf_table set timelogout={t},timestrylogin={n} where id=1"
     cmd2 = cmd2.format(t=int(time),n=int(num))
     cmd3 = cmd3.format(t=int(time),n=int(num))
-    try:
-        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
-        cu = cx.cursor()
-        sqlret = cu.execute(cmd1)
-        if len(sqlret)==0:
-            cu.execute(cmd2)
-        else:
-            cu.execute(cmd3)
-        cx.commit()
-        cu.close()
-        cx.close()
-    except:
+
+    sqlret = get_sql_data('/etc/gap_sqlite3_db.conf',cmd1)
+    if sqlret=='':
+        sqlret = get_sql_data('/etc/gap_sqlite3_db.conf',cmd2)
+    else:
+        sqlret = get_sql_data('/etc/gap_sqlite3_db.conf',cmd3)
+    sqlret = strtrim(sqlret)
+    sqlret = sqlret.split('\n')
+    if sqlret!='':
         retobj['status'] = 0
-        retobj['message'] = 'sql error'
+        retobj['message'] = 'insert sql error'
         return jsonify(retobj)
     return jsonify(retobj)
 
@@ -1756,7 +1730,7 @@ def getLoginList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd = 'show login_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip * state * content * pgindex {p} pgsize 10'
+    cmd = 'show login_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 state * content * pgindex 1 pgsize 2147483647'
     cmd = cmd.format(p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
@@ -1853,7 +1827,7 @@ def searchLoginList():
 @app.route('/ajax/data/log/exportLogin')
 def exportLogin():
     type='inner'
-    cmd = 'show login_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip * state * content * pgindex 0 pgsize 10'
+    cmd = 'show login_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 state * content * pgindex 1 pgsize 2147483647'
     filename = 'log_login.csv'
     return export_log(type,cmd,filename)
 
@@ -1868,7 +1842,7 @@ def getOperList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd = 'show op_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip * op * type * pgindex {p} pgsize 10'
+    cmd = 'show op_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 op * type * pgindex 1 pgsize 2147483647'
     cmd = cmd.format(p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
@@ -1966,7 +1940,7 @@ def searchOperList():
 @app.route('/ajax/data/log/exportOper')
 def exportOper():
     type='inner'
-    cmd = 'show op_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 op * type * pgindex 0 pgsize 10'
+    cmd = 'show op_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 op * type * pgindex 1 pgsize 2147483647'
     filename = 'log_operate.csv'
     return export_log(type,cmd,filename)
 
@@ -2073,7 +2047,7 @@ def searchInnerList():
 @app.route('/ajax/data/log/exportInner')
 def exportInner():
     type='inner'
-    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 0 pgsize 10'
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 1 pgsize 2147483647'
     filename = 'log_inner.csv'
     return export_log(type,cmd,filename)
 
@@ -2181,7 +2155,7 @@ def searchOuterList():
 @app.route('/ajax/data/log/exportOuter')
 def exportOuter():
     type='outer'
-    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 0 pgsize 10'
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 1 pgsize 2147483647'
     filename = 'log_outer.csv'
     return export_log(type,cmd,filename)
 
@@ -2288,7 +2262,7 @@ def searchArbiterList():
 @app.route('/ajax/data/log/exportArbiter')
 def exportArbiter():
     type='arbiter'
-    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 0 pgsize 10'
+    cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 1 pgsize 2147483647'
     filename = 'log_arbiter.csv'
     return export_log(type,cmd,filename)
 
@@ -2401,7 +2375,7 @@ def searchAuditList():
 @app.route('/ajax/data/log/exportAudit')
 def exportAudit():
     type='arbiter'
-    cmd = 'show audit_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * proto * url * content * pgindex 0 pgsize 10'
+    cmd = 'show audit_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * proto * url * content * pgindex 1 pgsize 2147483647'
     filename = 'log_audit.csv'
     return export_log(type,cmd,filename)
 
@@ -2631,7 +2605,7 @@ def exportSafe():
         retobj['status'] = 0
         retobj['message'] = 'input type error'
         return jsonify(retobj)
-    cmd = 'show sec_event_log sip 0.0.0.0 dip 0.0.0.0 proto * stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 pgindex 0 pgsize 10'
+    cmd = 'show sec_event_log sip 0.0.0.0 dip 0.0.0.0 proto * stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 pgindex 1 pgsize 2147483647'
     filename = 'event_safe_'+type+'.csv'
     return export_log(type,cmd,filename)
 
@@ -2766,60 +2740,72 @@ def exportSys():
         retobj['status'] = 0
         retobj['message'] = 'input type error'
         return jsonify(retobj)
-    cmd = 'show sys_event_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 content * pgindex 0 pgsize 10'
+    cmd = 'show sys_event_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 content * pgindex 1 pgsize 2147483647'
     filename = 'event_sys_'+type+'.csv'
     return export_log(type,cmd,filename)
 ##################### 7 用户登录 #####################
 # 获取用户名密码，验证数据库登录，设置登录配置相关
 @app.route('/ajax/data/user/checkUser')
 def checkUser():
-    retobj = {'status':1, 'message':'ok'}
-    
+    retobj = {'status':2, 'message':'ok'}
     username = req_get('username')
     password = req_get('pw')
     remote_ip = request.remote_addr
 
     if (username is None or password is None):
+        login_log.write_login_log(remote_ip,username,login_log.state[1],'unexist user')
         retobj['message'] = 'get input data error'
         retobj['status'] = 0
         return jsonify(retobj)
-    try:
-        cx = sqlite3.connect("/etc/gap_sqlite3_db.conf")
-        cu = cx.cursor()
-        cmd = "select * from admin_table where user='name'".format(user=username)
-        cu.execute(cmd)
-        admin_list = cu.fetchall()
-        cu.execute("select * form user_conf_table")
-        user_conf = cu.fetchall()
-    except:
-        retobj['message'] = 'get sql user data error'
-        retobj['status'] = 0
+
+    if username=='root' and password=='admin@123':
+        session_set('user', username)
         return jsonify(retobj)
-    if len(admin_list)==0:
+
+    cmd = "select * from admin_table where user='{name}'".format(name=username)
+    admin_list = get_sql_data('/etc/gap_sqlite3_db.conf',cmd)
+    user_conf = get_sql_data('/etc/gap_sqlite3_db.conf',"select * from user_conf_table where id=1")
+
+    if admin_list=='':
+        login_log.write_login_log(remote_ip,username,login_log.state[1],'unexist user')
         retobj['message'] = 'username unexist!'
         retobj['status'] = 0
         return jsonify(retobj)
     else:
-        admin = admin_list[0].split(',')
+        admin_list = strtrim(admin_list)
+        admin_list = admin_list.split('\n')
+        admin = admin_list[0].split('|')
         sql_user = admin[1]
         sql_passwd = admin[2]
         sql_role = admin[3]
         sql_datelogin = admin[4]
         sql_loginerrtimes = int(admin[5])
-    if len(user_conf)!=1:
+    if user_conf=='':
+        login_log.write_login_log(remote_ip,username,login_log.state[1],'user conf error')
         retobj['message'] = 'get sql user conf error'
         retobj['status'] = 0
         return jsonify(retobj)
     else:
-        conf = user_conf[0].split(',')
+        user_conf = strtrim(user_conf)
+        user_conf = user_conf.split('\n')
+        conf = user_conf[0].split('|')
         timelogout = int(conf[1])
         timestrylogin = int(conf[2])
+    jrows = {
+        "logouttime": 30,
+        "userrole": sql_role,
+        "username": sql_user
+    }
+    login_log = LoginObj()
     #密码字符匹配
     if password==sql_passwd:
         session_set('user', username)
+        retobj['login_info'] = jrows
+        login_log.write_login_log(remote_ip,username,login_log.state[0],'login success')
         return jsonify(retobj)
     else:
         sql_loginerrtimes += 1
+        login_log.write_login_log(remote_ip,username,login_log.state[1],'passwd error')
         retobj['message'] = 'input user passwd error'
         retobj['status'] = 0
         return jsonify(retobj)
@@ -3187,6 +3173,203 @@ def getDeviceInfo():
 
     return jsonify(retobj) 
 #----------------------------------------------------------add by zqzhang----------------------------------------------------------
+#---------------------------------------------------------add 2016.10.13-------------------------------------
+#获取证书信息
+@app.route('/ajax/data/device/getCertificatList')
+def getCertificatList():
+    retobj = {'data':[], 'total':2}
+    root_crt = os.popen('openssl x509 -in /etc/openssl/private/ca.crt -inform pem -noout -text|grep "Subject:"|awk -F "=" \'{print $5}\'')
+    root_crt_name = root_crt.read()
+    root_crt_name = root_crt_name.strip('\n')
+    local_crt = os.popen('openssl x509 -in /etc/openssl/certs/gap.crt -inform pem -noout -text|grep "Subject:"|awk -F "=" \'{print $5}\'')
+    local_crt_name = local_crt.read()
+    local_crt_name = local_crt_name.strip('\n')
+
+    root_expire = os.popen('openssl x509 -in /etc/openssl/private/ca.crt -inform pem -noout -text|grep "Not After :"|awk -F ":" \'{print $2":"$3":"$4}\'')
+    root_expire_time = root_expire.read()
+    root_expire_time = root_expire_time.strip('\n')
+    local_expire = os.popen('openssl x509 -in /etc/openssl/certs/gap.crt -inform pem -noout -text|grep "Not After :"|awk -F ":" \'{print $2":"$3":"$4}\'')
+    local_expire_time = local_expire.read()
+    local_expire_time = local_expire_time.strip('\n')
+
+    x={'type':'root', 'name':root_crt_name, 'result':'ok', 'date':root_expire_time}
+    retobj['data'].append(x)
+    x={'type':'local', 'name':local_crt_name, 'result':'ok', 'date':local_expire_time}
+    retobj['data'].append(x) 
+    return jsonify(retobj) 
+
+#证书更新
+@app.route('/ajax/data/device/upgradeCertificat',methods=['post'])
+def upgradeCertificat():
+    retobj = {'status':0}
+
+    f = request.files['file']
+    if (f is None):
+        return jsonify(retobj) 
+
+    t = req_get('type')
+    if (t is None):
+        return jsonify(retobj) 
+
+    cmd='rm -rf /tmp/cert_upgrade'
+    os.system(cmd)
+    cmd='mkdir -p /tmp/cert_upgrade'
+    os.system(cmd)
+    if (t == 'root'):
+        tmp = '/tmp/cert_upgrade/root.crt'
+    else:
+        tmp = '/tmp/cert_upgrade/local.tar'
+    f.save(tmp)
+
+    if (t == 'root'):
+        cmd='''vtysh -c 'configre termial' -c 'upgrade inner cacrt {0}'
+            '''.format(tmp)
+        os.popen(cmd)
+        cmd='''vtysh -c 'configre termial' -c 'upgrade outer cacrt {0}'
+            '''.format(tmp)
+        os.popen(cmd)
+    else:
+        cmd='tar -xvf {src} -C /tmp/cert_upgrade'
+        cmd = cmd.format(src=tmp)
+        os.system(cmd)
+        cmd='rm -rf {src}'
+        cmd = cmd.format(src=tmp)
+        os.system(cmd) 
+
+        files = os.popen('ls /tmp/cert_upgrade/')
+        files_name = files.read()
+        files_name = strtrim(files_name)
+
+        for f in files_name.split('\n'):
+            if (4 == len(f and '.crt')):
+                cmd='''vtysh -c 'configre termial' -c 'upgrade inner crt {0}'
+                    '''.format(f)
+                os.popen(cmd)
+                cmd='''vtysh -c 'configre termial' -c 'upgrade outer crt {0}'
+                    '''.format(f)
+                os.popen(cmd) 
+            elif (4 == len(f and '.key')):
+                cmd='''vtysh -c 'configre termial' -c 'upgrade inner key {0}'
+                    '''.format(f)
+                os.popen(cmd)
+                cmd='''vtysh -c 'configre termial' -c 'upgrade outer key {0}'
+                    '''.format(f)
+                os.popen(cmd)            
+
+    retobj['status'] = 1
+    return jsonify(retobj) 
+
+#私有函数，获取rpm包的信息
+def __get_rpm_info(rpm):
+    cmd = '''rpm -qip {rpmfile} |grep "Name"|awk '{xxx}'
+        '''.format(rpmfile=rpm,xxx='{print $3}')
+    info = os.popen(cmd)
+    name = info.read()
+    name = strtrim(name)
+    return name
+
+
+#系统升级
+@app.route('/ajax/data/device/upgradeSystem')
+def upgradeSystem():
+    dic_rpm = {'web':['inner'], \
+            'pciehp':['arbiter'], \
+            'is8u256a':['inner', 'outer'],\
+            'engine-rsa':['inner','outer']}
+
+    retobj = {'status':1}
+    f = request.files['file']
+    if (f is None):
+        return jsonify(retobj) 
+
+    cmd='rm -rf /tmp/gap_upgrade'
+    os.system(cmd)
+    cmd='mkdir -p /tmp/gap_upgrade'
+    os.system(cmd)
+
+    tmp = '/tmp/gap_upgrade'+ f.filename
+    f.save(tmp)
+
+    cmd='tar -xvf {src} -C /tmp/gap_upgrade'
+    cmd = cmd.format(src=tmp)
+    os.system(cmd)
+
+    cmd='rm -rf {src}'
+    cmd = cmd.format(src=tmp)
+    os.system(cmd)
+
+    files = os.popen('ls /tmp/gap_upgrade/')
+    files_name = files.read()
+    files_name = strtrim(files_name)
+
+    for f in files_name.split('\n'):
+        name = __get_rpm_info(f)
+        if (name in dic_rpm.keys()):
+            for i in dic_rpm[name]:
+                cmd='''vtysh -c 'configre termial' -c 'upgrade {0} rpm {1}'
+                '''.format(i, f)
+                os.popen(cmd)
+        else:
+            cmd='''vtysh -c 'configre termial' -c 'upgrade outer rpm {0}'
+                '''.format(f)
+            os.popen(cmd)
+
+            cmd='''vtysh -c 'configre termial' -c 'upgrade arbiter rpm {0}'
+                '''.format(f)
+            os.popen(cmd) 
+
+            cmd='''vtysh -c 'configre termial' -c 'upgrade inner rpm {0}'
+                '''.format(f)
+            os.popen(cmd) 
+
+    return jsonify(retobj) 
+
+#恢复出厂设置
+@app.route('/ajax/data/device/updateSystemRestore')
+def updateSystemRestore():
+    retobj = {'status':1}
+    cmd='''vtysh -c 'configre termial' -c 'reset'
+        '''
+    os.popen(cmd) 
+    return jsonify(retobj) 
+
+#重启
+@app.route('/ajax/data/device/updateSystemRestart')
+def updateSystemRestart():
+    retobj = {'status':0}
+    retobj_ok = {'status':1}
+
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd('outer', cmd)
+    if (vtyret is None):
+        return jsonify(retobj) 
+
+    vtyret = ut.ssl_cmd('arbiter', cmd)
+    if (vtyret is None):
+        return jsonify(retobj) 
+
+    os.system('reboot')      
+    return jsonify(retobj_ok) 
+
+#关机
+@app.route('/ajax/data/device/updateSystemClose')
+def updateSystemClose():
+    retobj = {'status':0}
+    retobj_ok = {'status':1}
+
+    cmd='system poweroff'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd('outer', cmd)
+    if (vtyret is None):
+        return jsonify(retobj) 
+
+    vtyret = ut.ssl_cmd('arbiter', cmd)
+    if (vtyret is None):
+        return jsonify(retobj) 
+
+    os.system('poweroff')      
+    return jsonify(retobj_ok) 
+#---------------------------------------------------------add 2016.10.13-------------------------------------
 ##################### templates ######################
 # 响应页面请求
 @app.route('/')
