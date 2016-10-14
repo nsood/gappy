@@ -1,5 +1,5 @@
 #coding=utf-8  
-from flask import Flask, request, render_template, make_response, session, redirect, jsonify
+from flask import Flask, request, render_template, make_response, session, redirect, jsonify, send_from_directory
 import json
 import sqlite3
 import time
@@ -55,6 +55,12 @@ class LoginObj(object):
         cmd = cmd.format(ip, user, state, content)
         os.system(cmd)
 #------------------------end-----------login class-------------------------------------
+
+def write_opt_log(op,mach,content):
+    user = session_get('user')
+    ip = session_get('ip')
+    opt = OpObj()
+    opt.write_op_log(ip,user,op,mach,content)
 
 # 数据库借口
 def get_sql_data(db_name,cmd):
@@ -199,6 +205,11 @@ def test():
     print 'vtyret '+vtyret+'\n'
     return "test return"
 
+#文件上传路由
+@app.route('/download/<file_name>',methods=['POST','GET'])
+def download(file_name):
+    dir = '/download'
+    return send_from_directory(dir,file_name,as_attachment=True)
 
 ##################### 1.2网络配置 ########################
 # 实现获取网卡信息
@@ -248,6 +259,7 @@ def route_ajax_getNetworkList():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     retobj = impl_ajax_getNetworkList(type,None)
+    write_opt_log('view',type,'view network list')
     return jsonify(retobj)
 
 # 获取网卡信息	test pass
@@ -266,6 +278,7 @@ def route_ajax_getNetworkConfig():
         return jsonify(retobj)
 
     retobj = impl_ajax_getNetworkList(type,name)
+    write_opt_log('view',type,'view network info')
     return jsonify(retobj)
 
 # 设置网卡信息	test pass
@@ -298,6 +311,7 @@ def route_ajax_setNetworkConfig():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('edit',type,'set network info')
     print retobj
     return jsonify(retobj)
 
@@ -378,6 +392,7 @@ def getDoubleConfig():
     }
     jrows.append(data)
     retobj['data']=jrows
+    write_opt_log('view','inner','view HA info')
     return jsonify(retobj)
 
 # b 设置热备参数
@@ -426,6 +441,7 @@ def getLoginConfig():
         }
     data.append(jobj)
     retobj['data']=data
+    write_opt_log('view',type,'view login config')
     return jsonify(retobj)
 #b 设置登录配置
 @app.route('/ajax/data/device/setLoginConfig')
@@ -449,6 +465,7 @@ def setLoginConfig():
         retobj['status'] = 0
         retobj['message'] = 'sql error'
         return jsonify(retobj)
+    write_opt_log('edit',type,'edit login config')
     return jsonify(retobj)
 
 
@@ -476,6 +493,7 @@ def getSysTimeConfig():
             }
             data.append(jobj)
     retobj['data'] = data
+    write_opt_log('view',type,'view sysTime')
     return jsonify(retobj)
 #b 编辑时间设置 保存数据
 @app.route('/ajax/data/device/setSysTimeConfig')
@@ -507,6 +525,7 @@ def setSysTimeConfig():
         retobj['message'] = 'input error'
         retobj['status'] = 0
         return jsonify(retobj)
+    write_opt_log('edit',type,'set time config')
     return jsonify(retobj)
 ##################### 1.5.2证书更新 #####################
 ##################### 1.5.3系统升级 #####################
@@ -555,6 +574,7 @@ def getIpList():
     retobj['page'] = page
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('view','','view ipgroup')
     return jsonify(retobj)
 
 #b IP组添加		test pass
@@ -593,6 +613,7 @@ def addIp():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('add','','add ipgroup')
     return jsonify(retobj)
 
 #c 获取一行IP组	test pass
@@ -661,6 +682,7 @@ def setIpConfig():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('edit','','edit ipgroup')
     return jsonify(retobj)
 #e IP组删除		test pass
 @app.route('/ajax/data/device/deleteIp')
@@ -693,6 +715,7 @@ def deleteIp():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('del','','del ipgroup')
     return jsonify(retobj)
 
 
@@ -750,6 +773,7 @@ def route_ajax_getRouterList():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     retobj = impl_ajax_getRouterList(type,page,None)
+    write_opt_log('view',type,'view RouterList')
     return jsonify(retobj)
 
 #b 添加一个路由	test pass
@@ -788,6 +812,7 @@ def route_ajax_addRouter():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('add',type,'add RouterList')
     return jsonify(retobj)
 
 #c 获取IP组		test pass
@@ -841,6 +866,7 @@ def getRouterConfig():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     retobj = impl_ajax_getRouterList(type,0,name)
+    write_opt_log('view',type,'view RouterList config')
     return jsonify(retobj)
 
 #e 修改一个路由	test pass
@@ -876,6 +902,7 @@ def setRouterConfig():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('edit',type,'edit Router config ')
     return jsonify(retobj)
 
 #f 删除路由		test pass
@@ -902,6 +929,7 @@ def deleteRouter():
             retobj['message'] = 'vty failed'
             return jsonify(retobj)
         retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('del',type,'del Router')
     return jsonify(retobj)
     
 
@@ -944,6 +972,7 @@ def getAdminList():
         jrows.append(jobj)
     retobj['total'] = rows
     retobj['data'] = jrows
+    write_opt_log('view','inner','view AdminList')
     return jsonify(retobj)
 
 # b 添加管理员
@@ -964,6 +993,7 @@ def addAdmin():
         retobj['status'] = 0
         retobj['message'] = 'insert sql error'
         return jsonify(retobj)
+    write_opt_log('add','inner','add Admin')
     return jsonify(retobj)
 
 # c 编辑管理员
@@ -983,6 +1013,7 @@ def setAdminConfig():
         retobj['status'] = 0
         retobj['message'] = 'update sql error'
         return jsonify(retobj)
+    write_opt_log('edit','inner','edit Admin')
     return jsonify(retobj)
 
 # d 删除管理员
@@ -1002,6 +1033,7 @@ def deleteAdmin():
         retobj['status'] = 0
         retobj['message'] = 'delete sql error'
         return jsonify(retobj)
+    write_opt_log('del','inner','del Admin')
     return jsonify(retobj)
 
 # e 检查管理员存在
@@ -1019,7 +1051,7 @@ def checkAdminName():
     sqlret = strtrim(sqlret)
     sqlret = sqlret.split('\n')
     rows = len(sqlret)
-    if len(sqlret)!=1 or sqlret[1]=='':
+    if len(sqlret)!=1 or sqlret[0]=='':
         retobj['status'] = 0
         retobj['message'] = 'check admin sql error'
         return jsonify(retobj)
@@ -1099,6 +1131,7 @@ def getGroupList():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     retobj = impl_ajax_getGroupList(page)
+    write_opt_log('view','arbiter','view GroupList')
     return jsonify(retobj)
 
 #b 添加用户组	test pass
@@ -1183,6 +1216,7 @@ def addGroup():
         return jsonify(retobj)
 
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('add','arbiter','add Group')
     return jsonify(retobj)
 
 #c 获取用户组	test pass
@@ -1253,6 +1287,7 @@ def getGroupConfig():
     print jobj
     print jrows
     retobj['data'] = jrows
+    write_opt_log('view','arbiter','view Group config')
     return jsonify(retobj)
 #d 编辑用户组	test pass
 @app.route('/ajax/data/rule/setGroupConfig')
@@ -1301,6 +1336,7 @@ def setGroupConfig():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('edit','arbiter','edit Group')
     return jsonify(retobj)
 
 #e 删除用户组	test pass
@@ -1323,6 +1359,7 @@ def deleteGroup():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('del','arbiter','del Group')
     return jsonify(retobj)
 
 ##################### 2.2 用户规则#####################
@@ -1386,6 +1423,7 @@ def getUserList():
         return jsonify(retobj)
     retobj = impl_ajax_getUserList(page)
 #    print retobj
+    write_opt_log('view','arbiter','view UserList')
     return jsonify(retobj)
 #b 用户添加		test pass
 @app.route('/ajax/data/rule/addUser')
@@ -1422,6 +1460,7 @@ def addUser():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('add','arbiter','add User rule')
     return jsonify(retobj)    
 
 #c 获取用户组	test pass
@@ -1511,6 +1550,7 @@ def setUserConfig():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('edit','arbiter','edit User rule')
     return jsonify(retobj)
 
 #f 删除用户		test pass
@@ -1537,6 +1577,7 @@ def deleteUser():
                     retobj['message'] = 'vty failed'
                     return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('del','arbiter','del User rule')
     return jsonify(retobj)
 
 
@@ -1587,6 +1628,7 @@ def getIpMacList():
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
     retobj = impl_ajax_getIpMacList(page)
+    write_opt_log('view','arbiter','view upmac rule')
     return jsonify(retobj)
 #b IP-MAC添加	test pass
 @app.route('/ajax/data/rule/addIpMac')
@@ -1616,6 +1658,7 @@ def addIpMac():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('add','arbiter','add upmac rule')
     return jsonify(retobj)    
 #c 获取IP-MAC	test pass
 @app.route('/ajax/data/rule/getIpMacConfig')
@@ -1662,6 +1705,7 @@ def setIpMacConfig():
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('edit','arbiter','edit upmac rule')
     return jsonify(retobj)
 
 #e 删除IP-MAC	test pass
@@ -1689,6 +1733,7 @@ def deleteIpMac():
                     return jsonify(retobj)
                 continue
     retobj = vtyresul_to_obj(vtyret)
+    write_opt_log('del','arbiter','del upmac rule')
     return jsonify(retobj)
 
 
@@ -1730,7 +1775,7 @@ def getLoginList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd = 'show login_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 state * content * pgindex 1 pgsize 2147483647'
+    cmd = 'show login_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 state * content * pgindex {p} pgsize 10'
     cmd = cmd.format(p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
@@ -1747,17 +1792,19 @@ def getLoginList():
             totalline = line
         if (len(fields) != 6):
             continue
+        status = (fields[4]=='ok') and '0' or '1'
         jobj = {
-                'data' : fields[1],
+                'date' : fields[1],
                 'user':fields[3],
                 'ip':fields[2],
-                'status':fields[4],
+                'status':status,
                 'reason':fields[5]
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('view',type,'view LoginList')
     return jsonify(retobj)
 
 # b 搜索日志列表
@@ -1818,6 +1865,7 @@ def searchLoginList():
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('serch',type,'serch LoginList')
     return jsonify(retobj)
 
 # c 导出日志
@@ -1829,6 +1877,7 @@ def exportLogin():
     type='inner'
     cmd = 'show login_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 state * content * pgindex 1 pgsize 2147483647'
     filename = 'log_login.csv'
+    write_opt_log('export',type,'export LoginList')
     return export_log(type,cmd,filename)
 
 ##################### 3.2 操作日志 ######################
@@ -1871,6 +1920,7 @@ def getOperList():
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('view',type,'view LoginList')
     return jsonify(retobj)
 
 # b 搜索日志列表
@@ -1931,6 +1981,7 @@ def searchOperList():
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('serch',type,'serch LoginList')
     return jsonify(retobj)
 
 # c 导出日志
@@ -1942,6 +1993,7 @@ def exportOper():
     type='inner'
     cmd = 'show op_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 op * type * pgindex 1 pgsize 2147483647'
     filename = 'log_operate.csv'
+    write_opt_log('export',type,'export LoginList')
     return export_log(type,cmd,filename)
 
 ##################### 3.3 系统日志(内端机) ######################
@@ -1982,6 +2034,7 @@ def getInnerList():
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('view',type,'view sys log')
     return jsonify(retobj)
 
 # b 搜索日志列表
@@ -2038,6 +2091,7 @@ def searchInnerList():
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('serch',type,'serch sys log')
     return jsonify(retobj)
 
 # c 导出日志
@@ -2049,6 +2103,7 @@ def exportInner():
     type='inner'
     cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 1 pgsize 2147483647'
     filename = 'log_inner.csv'
+    write_opt_log('export',type,'export sys log')
     return export_log(type,cmd,filename)
 
 
@@ -2157,6 +2212,7 @@ def exportOuter():
     type='outer'
     cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 1 pgsize 2147483647'
     filename = 'log_outer.csv'
+    write_opt_log('export',type,'export sys log')
     return export_log(type,cmd,filename)
 
 ##################### 3.3 系统日志(仲裁机) ######################
@@ -2197,6 +2253,7 @@ def getArbiterList():
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('view',type,'view sys log')
     return jsonify(retobj)
 
 # b 搜索日志列表
@@ -2253,6 +2310,7 @@ def searchArbiterList():
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('serch',type,'serch sys log')
     return jsonify(retobj)
 
 # c 导出日志
@@ -2264,6 +2322,7 @@ def exportArbiter():
     type='arbiter'
     cmd = 'show sys_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 module * level * content * pgindex 1 pgsize 2147483647'
     filename = 'log_arbiter.csv'
+    write_opt_log('export',type,'export sys log')
     return export_log(type,cmd,filename)
 
 ##################### 3.4 审计日志  ######################
@@ -2305,6 +2364,7 @@ def getAuditList():
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('view',type,'view audit log')
     return jsonify(retobj)
 
 # b 搜索日志列表
@@ -2366,6 +2426,7 @@ def searchAuditList():
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('serch',type,'serch audit log')
     return jsonify(retobj)
 
 # c 导出日志
@@ -2377,6 +2438,7 @@ def exportAudit():
     type='arbiter'
     cmd = 'show audit_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * proto * url * content * pgindex 1 pgsize 2147483647'
     filename = 'log_audit.csv'
+    write_opt_log('export',type,'export audit log')
     return export_log(type,cmd,filename)
 
 
@@ -2466,6 +2528,7 @@ def getSafeList():
     retobj['page'] = page
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('view',type,'getSafeList')
     return jsonify(retobj)
 
 # b 搜索事件列表
@@ -2525,6 +2588,7 @@ def searchSafeList():
     retobj['page'] = page
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('serch',type,'serch safe event')
     return jsonify(retobj)
 
 
@@ -2564,6 +2628,7 @@ def getSafeConfig():
                 }
         break
     retobj['data'] = jrows
+    write_opt_log('view',type,'getSafeConfig')
     return jsonify(retobj)
 
 
@@ -2583,13 +2648,14 @@ def clearSafe():
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
+    write_opt_log('del',type,'clearSafeList')
     return jsonify(retobj)
 
 
 # e 安全事件总数
-app.route('/ajax/data/event/getEventNumSafe')
+@app.route('/ajax/data/event/getEventNumSafe')
 def getEventNumSafe():
-    eventinfo =  getEventNum('sec_event_log')
+    eventinfo =  getEventNum('sec_event_table')
     syseventinfo = {
         "totalEvent": eventinfo[0],
         "todaySysEvent": eventinfo[1]
@@ -2607,6 +2673,7 @@ def exportSafe():
         return jsonify(retobj)
     cmd = 'show sec_event_log sip 0.0.0.0 dip 0.0.0.0 proto * stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 pgindex 1 pgsize 2147483647'
     filename = 'event_safe_'+type+'.csv'
+    write_opt_log('export',type,'export SafeList')
     return export_log(type,cmd,filename)
 
 ##################### 4.2 系统事件#####################
@@ -2649,6 +2716,7 @@ def getSysList():
     retobj['page'] = page
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('view',type,'view SysEventList')
     return jsonify(retobj)
 
 #  b 搜索事件列表
@@ -2700,6 +2768,7 @@ def searchSysList():
     retobj['page'] = page
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
+    write_opt_log('serch',type,'serch SysEventList')
     return jsonify(retobj)
 
 # c 清空所有事件
@@ -2718,12 +2787,13 @@ def clearSys():
         retobj['status'] = 0
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
+    write_opt_log('del',type,'clear SysEventList')
     return jsonify(retobj)
 
 #d 系统事件总数
-app.route('/ajax/data/event/getEventNumSys')
+@app.route('/ajax/data/event/getEventNumSys')
 def getEventNumSys():
-    eventinfo = getEventNum('sys_event_log')
+    eventinfo = getEventNum('sys_event_table')
     safeeventinfo = {
         "totalEvent": eventinfo[0],
         "todaySafeEvent": eventinfo[1]
@@ -2742,10 +2812,11 @@ def exportSys():
         return jsonify(retobj)
     cmd = 'show sys_event_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 content * pgindex 1 pgsize 2147483647'
     filename = 'event_sys_'+type+'.csv'
+    write_opt_log('export',type,'export SysEventList')
     return export_log(type,cmd,filename)
 ##################### 7 用户登录 #####################
 # 获取用户名密码，验证数据库登录，设置登录配置相关
-@app.route('/ajax/data/user/checkUser')
+@app.route('/ajax/data/user/checkUser',methods=['post'])
 def checkUser():
     retobj = {'status':2, 'message':'ok'}
     username = req_get('username')
@@ -2800,6 +2871,7 @@ def checkUser():
     #密码字符匹配
     if password==sql_passwd:
         session_set('user', username)
+        session_set('ip', remote_ip)
         retobj['login_info'] = jrows
         login_log.write_login_log(remote_ip,username,login_log.state[0],'login success')
         return jsonify(retobj)
@@ -2807,7 +2879,7 @@ def checkUser():
         sql_loginerrtimes += 1
         login_log.write_login_log(remote_ip,username,login_log.state[1],'passwd error')
         retobj['message'] = 'input user passwd error'
-        retobj['status'] = 0
+        retobj['status'] = 3
         return jsonify(retobj)
 
 #----------------------------------------------------------add by zqzhang----------------------------------------------------------
@@ -2872,6 +2944,7 @@ def getHttpList():
     user = '*'
     page = req_get('page')
     retobj = __select_session(proto, inip, outip, user, page)
+    write_opt_log('view','','getHttpList')
     return jsonify(retobj)
 
 
@@ -2884,6 +2957,7 @@ def searchHttpList():
     user = req_get('user')
     page = req_get('page')
     retobj = __select_session(proto, inip, outip, user, page)
+    write_opt_log('view','','searchHttpList')
     return jsonify(retobj)
 
 #查询所有FTP会话
@@ -2895,6 +2969,7 @@ def getFtpList():
     user = '*'
     page = req_get('page')
     retobj = __select_session(proto, inip, outip, user, page)
+    write_opt_log('view','','getFtpList')
     return jsonify(retobj)
 
 #按条件查询FTP会话
@@ -2906,6 +2981,7 @@ def searchFtpList():
     user = req_get('user')
     page = req_get('page')
     retobj = __select_session(proto, inip, outip, user, page)
+    write_opt_log('view','','searchFtpList')
     return jsonify(retobj)
 
 #查询所有TDCS会话
@@ -2917,6 +2993,7 @@ def getTdcsList():
     user = '*'
     page = req_get('page')
     retobj = __select_session(proto, inip, outip, user, page)
+    write_opt_log('view','','getTdcsList')
     return jsonify(retobj)
 
 #按条件查询TDCS会话
@@ -2928,6 +3005,7 @@ def searchTdcsList():
     user = req_get('user')
     page = req_get('page')
     retobj = __select_session(proto, inip, outip, user, page)
+    write_opt_log('view','','searchTdcsList')
     return jsonify(retobj)
 
 #查询所有HTTPS会话
@@ -2939,6 +3017,7 @@ def getHttpsList():
     user = '*'
     page = req_get('page')
     retobj = __select_session(proto, inip, outip, user, page)
+    write_opt_log('view','','getHttpsList')
     return jsonify(retobj)
 
 #按条件查询HTTPS会话
@@ -2950,6 +3029,7 @@ def searchHttpsList():
     user = req_get('user')
     page = req_get('page')
     retobj = __select_session(proto, inip, outip, user, page)
+    write_opt_log('view','','searchHttpsList')
     return jsonify(retobj)
 
 #获取系统时间和运行时间，（获取内端机系统时间即可，用来表示网闸的系统时间）
@@ -3052,7 +3132,6 @@ def __get_machstate(mach):
         retobj['data'][0]['todayEventNum'] = todayevents
         retobj['data'][0]['historyEventNum'] = int(totalevents) - int(todayevents)
         retobj['data'][0]['consoleLinkState'] = 1
-
     return retobj
 
 #私有函数，获取指定机器的接口总流量值(历史流量)
@@ -3072,7 +3151,6 @@ def __get_traffic(mach):
         retobj['timePoints'].append(x)
         y = round((float(fields[1])+float(fields[2]))*8/1000, 1)
         retobj['points'].append(y)
-     
     return retobj
 
 #私有函数，获取指定机器的接口总流量点值(当前流量)
@@ -3170,7 +3248,7 @@ def getDeviceInfo():
             retobj['data'][0]['SN'] = fields[1]      
         elif (fields[0] == 'version'):
             retobj['data'][0]['version'] = fields[1]
-
+    write_opt_log('view',mach,'getDeviceInfo')
     return jsonify(retobj) 
 #----------------------------------------------------------add by zqzhang----------------------------------------------------------
 #---------------------------------------------------------add 2016.10.13-------------------------------------
@@ -3195,7 +3273,8 @@ def getCertificatList():
     x={'type':'root', 'name':root_crt_name, 'result':'ok', 'date':root_expire_time}
     retobj['data'].append(x)
     x={'type':'local', 'name':local_crt_name, 'result':'ok', 'date':local_expire_time}
-    retobj['data'].append(x) 
+    retobj['data'].append(x)
+    write_opt_log('view','','getCertificatList')
     return jsonify(retobj) 
 
 #证书更新
@@ -3222,10 +3301,10 @@ def upgradeCertificat():
     f.save(tmp)
 
     if (t == 'root'):
-        cmd='''vtysh -c 'configre termial' -c 'upgrade inner cacrt {0}'
+        cmd='''vtysh -c 'configure terminal' -c 'upgrade inner cacrt {0}'
             '''.format(tmp)
         os.popen(cmd)
-        cmd='''vtysh -c 'configre termial' -c 'upgrade outer cacrt {0}'
+        cmd='''vtysh -c 'configure terminal' -c 'upgrade outer cacrt {0}'
             '''.format(tmp)
         os.popen(cmd)
     else:
@@ -3242,21 +3321,22 @@ def upgradeCertificat():
 
         for f in files_name.split('\n'):
             if (4 == len(f and '.crt')):
-                cmd='''vtysh -c 'configre termial' -c 'upgrade inner crt {0}'
+                cmd='''vtysh -c 'configure terminal' -c 'upgrade inner crt {0}'
                     '''.format(f)
                 os.popen(cmd)
-                cmd='''vtysh -c 'configre termial' -c 'upgrade outer crt {0}'
+                cmd='''vtysh -c 'configure terminal' -c 'upgrade outer crt {0}'
                     '''.format(f)
                 os.popen(cmd) 
             elif (4 == len(f and '.key')):
-                cmd='''vtysh -c 'configre termial' -c 'upgrade inner key {0}'
+                cmd='''vtysh -c 'configure terminal' -c 'upgrade inner key {0}'
                     '''.format(f)
                 os.popen(cmd)
-                cmd='''vtysh -c 'configre termial' -c 'upgrade outer key {0}'
+                cmd='''vtysh -c 'configure terminal' -c 'upgrade outer key {0}'
                     '''.format(f)
                 os.popen(cmd)            
 
     retobj['status'] = 1
+    write_opt_log('update','','upgradeCertificat')
     return jsonify(retobj) 
 
 #私有函数，获取rpm包的信息
@@ -3306,31 +3386,32 @@ def upgradeSystem():
         name = __get_rpm_info(f)
         if (name in dic_rpm.keys()):
             for i in dic_rpm[name]:
-                cmd='''vtysh -c 'configre termial' -c 'upgrade {0} rpm {1}'
+                cmd='''vtysh -c 'configure terminal' -c 'upgrade {0} rpm {1}'
                 '''.format(i, f)
                 os.popen(cmd)
         else:
-            cmd='''vtysh -c 'configre termial' -c 'upgrade outer rpm {0}'
+            cmd='''vtysh -c 'configure terminal' -c 'upgrade outer rpm {0}'
                 '''.format(f)
             os.popen(cmd)
 
-            cmd='''vtysh -c 'configre termial' -c 'upgrade arbiter rpm {0}'
+            cmd='''vtysh -c 'configure terminal' -c 'upgrade arbiter rpm {0}'
                 '''.format(f)
             os.popen(cmd) 
 
-            cmd='''vtysh -c 'configre termial' -c 'upgrade inner rpm {0}'
+            cmd='''vtysh -c 'configure terminal' -c 'upgrade inner rpm {0}'
                 '''.format(f)
             os.popen(cmd) 
-
+    write_opt_log('update','','upgradeSystem')
     return jsonify(retobj) 
 
 #恢复出厂设置
 @app.route('/ajax/data/device/updateSystemRestore')
 def updateSystemRestore():
     retobj = {'status':1}
-    cmd='''vtysh -c 'configre termial' -c 'reset'
+    cmd='''vtysh -c 'configure terminal' -c 'reset'
         '''
-    os.popen(cmd) 
+    os.popen(cmd)
+    write_opt_log('recover','','updateSystemRestore')
     return jsonify(retobj) 
 
 #重启
@@ -3339,6 +3420,7 @@ def updateSystemRestart():
     retobj = {'status':0}
     retobj_ok = {'status':1}
 
+    cmd='system reboot'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd('outer', cmd)
     if (vtyret is None):
@@ -3348,7 +3430,7 @@ def updateSystemRestart():
     if (vtyret is None):
         return jsonify(retobj) 
 
-    os.system('reboot')      
+    os.system('reboot')
     return jsonify(retobj_ok) 
 
 #关机
