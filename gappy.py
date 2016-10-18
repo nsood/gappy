@@ -36,7 +36,7 @@ def session_set(key, value):
 #------------------------begin-----------op class-------------------------------------
 class OpObj(object):
     def __init__(self):
-        self.op = ['add', 'del', 'edit', 'view']
+        self.op = ['add', 'del', 'edit', 'view','export']
         self.mach = ['inner', 'arbiter', 'outer']
 
     def write_op_log(self, ip, user, op, mach, content):
@@ -154,24 +154,29 @@ class Util_telnet(object):
             type=None
         if (type is None):
             return type
-        self.tn.read_until(self.promt+'>', 5)
-        self.tn.write('enable\r')
-        self.tn.read_until(self.promt+'#', 5)
-        self.tn.write('configure terminal\r')
-        self.tn.read_until(self.promt+'(config)#', 5)
-        self.tn.write('app\r')
-        self.tn.read_until(self.promt+'(app)#', 5)
-        self.tn.write(type+'\r')
-        self.tn.read_until(self.promt+'(app)#', 5)
-        print "debug cmd : "+cmd
-        self.tn.write(cmd+'\r')
-        s = self.tn.read_until(self.promt+'(app)#', 5)
-        print "debug util ret:"+s
-        cut = s.split('\n')[0]
-        s = s.replace(cut+'\n','')
-        s = s.replace(promt+'(app)#','')
-        self.tn.close()
-        return s
+
+        try:
+            self.tn.read_until(self.promt+'>', 5)
+            self.tn.write('enable\r')
+            self.tn.read_until(self.promt+'#', 5)
+            self.tn.write('configure terminal\r')
+            self.tn.read_until(self.promt+'(config)#', 5)
+            self.tn.write('app\r')
+            self.tn.read_until(self.promt+'(app)#', 5)
+            self.tn.write(type+'\r')
+            self.tn.read_until(self.promt+'(app)#', 5)
+            print "debug cmd : "+cmd
+            self.tn.write(cmd+'\r')
+            s = self.tn.read_until(self.promt+'(app)#', 5)
+            print "debug util ret:"+s
+            cut = s.split('\n')[0]
+            s = s.replace(cut+'\n','')
+            s = s.replace(promt+'(app)#','')
+            self.tn.close()
+            return s
+        except Exception as e:
+            print e
+            return rt
 
 def get_total_num(s):
     print "debug s: "+s
@@ -208,7 +213,7 @@ def test():
 #文件上传路由
 @app.route('/download/<file_name>',methods=['POST','GET'])
 def download(file_name):
-    dir = '/download'
+    dir = './download'
     return send_from_directory(dir,file_name,as_attachment=True)
 
 ##################### 1.2网络配置 ########################
@@ -1384,10 +1389,6 @@ def impl_ajax_getUserList(page):
             totalline = line
         if (len(fields) != 6):
             continue
-        if fields[4]=='1':
-            fields[4]='encrypt'
-        else:
-            fields[4]='nonencrypt'
         ips = fields[2].split('-')
         if len(ips)==1:
             ips = fields[2]
@@ -1449,6 +1450,10 @@ def addUser():
     else:
         Type = '0'
 #    print ips
+    if (dataobj.MAC == ''):
+        dataobj.MAC = '00:00:00:00:00:00'
+    if (dataobj.IP == ''):
+        ips = '0.0.0.0'
     cmd='user add username {username} groupname {groupname} ip {ip} mac {m} enable {e} type {t}'
     cmd = cmd.format(username=dataobj.Name,groupname=dataobj.UserGroup,ip=ips,m=dataobj.MAC,e=dataobj.Statue,t=Type)
 #    print "debug : " + cmd
@@ -1749,12 +1754,14 @@ def export_log(type,cmd,filename):
         retobj['message'] = 'vty failed'
         return jsonify(retobj)
     vtyret = strtrim(vtyret)
-    if not os.path.exists('/download/'):
+    if not os.path.exists('./download/'):
+        os.system('mkdir ./download')
+    if not os.path.exists('./download/'):
         retobj['status'] = 0
-        retobj['message'] = '/download dir unexist'
+        retobj['message'] = './download dir unexist'
         return jsonify(retobj)
     try:
-        f = open('/download/'+filename,'w')
+        f = open('./download/'+filename,'w')
         for line in vtyret.split('\n'):
             f.write(line.replace('|',','))
         f.close()
@@ -1792,19 +1799,18 @@ def getLoginList():
             totalline = line
         if (len(fields) != 6):
             continue
-        status = (fields[4]=='ok') and '0' or '1'
         jobj = {
                 'date' : fields[1],
                 'user':fields[3],
                 'ip':fields[2],
-                'status':status,
+                'status':fields[4],
                 'reason':fields[5]
                 }
         jrows.append(jobj)
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
-    write_opt_log('view',type,'view LoginList')
+    #write_opt_log('view',type,'view LoginList')
     return jsonify(retobj)
 
 # b 搜索日志列表
@@ -1855,7 +1861,7 @@ def searchLoginList():
         if (len(fields) != 6):
             continue
         jobj = {
-                'data' : fields[1],
+                'date' : fields[1],
                 'user':fields[3],
                 'ip':fields[2],
                 'status':fields[4],
@@ -1865,7 +1871,7 @@ def searchLoginList():
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
-    write_opt_log('serch',type,'serch LoginList')
+    #write_opt_log('serch',type,'serch LoginList')
     return jsonify(retobj)
 
 # c 导出日志
@@ -1891,7 +1897,7 @@ def getOperList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd = 'show op_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 op * type * pgindex 1 pgsize 2147483647'
+    cmd = 'show op_log stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 user * ip 0.0.0.0 op * type * pgindex {p} pgsize 10'
     cmd = cmd.format(p=int(page))
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
@@ -1906,21 +1912,19 @@ def getOperList():
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
             totalline = line
-        if (len(fields) != 6):
+        if (len(fields) != 7):
             continue
-        jobj = {
-                'data' : fields[1],
-                'user':fields[3],
+        jobj = {'date':fields[1],
                 'ip':fields[2],
+                'user':fields[3],
                 'behave':fields[4],
                 'type':fields[5],
-                'desc':field[6]
-                }
+                'desc':fields[6]}
         jrows.append(jobj)
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
-    write_opt_log('view',type,'view LoginList')
+    #write_opt_log('view',type,'view OperList')
     return jsonify(retobj)
 
 # b 搜索日志列表
@@ -1968,10 +1972,10 @@ def searchOperList():
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
             totalline = line
-        if (len(fields) != 6):
+        if (len(fields) != 7):
             continue
         jobj = {
-                'data' : fields[1],
+                'date':fields[1],
                 'user':fields[3],
                 'ip':fields[2],
                 'behave':fields[4],
@@ -1981,7 +1985,7 @@ def searchOperList():
     retobj['page'] = int(page)
     retobj['total'] = get_total_num(totalline)
     retobj['data'] = jrows
-    write_opt_log('serch',type,'serch LoginList')
+    #write_opt_log('serch',type,'serch OperList')
     return jsonify(retobj)
 
 # c 导出日志
@@ -2445,47 +2449,50 @@ def exportAudit():
 ##################### 4 事件信息 ######################
 # 0 获取事件总数
 def getEventNum(log_table):
-    retobj = {'status':1, 'message':'ok'}
+    #retobj = {'status':1, 'message':'ok'}
 
     event_total=0
     event_today=0
+    num=[event_total,event_today]
 
     ut = Util_telnet(promt)
+    print '1----------------'
     cmd = 'show_event_num table {log}'.format(log=log_table)
     type = 'inner'
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None or vtyret.find('%')==0):
-        retobj['status'] = 0
-        retobj['message'] = 'vty failed'
-        return jsonify(retobj)
+        return num
+    print '2----------------'
     vtyret = vtyret.replace('\n','')
     vtyres = vtyret.split(',')
     event_total += int(vtyres[0].replace('total_num=',''))
     event_today += int(vtyres[1].replace('today_num=',''))
 
+    print '3---------------'
     type = 'outer'
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None or vtyret.find('%')==0):
-        retobj['status'] = 0
-        retobj['message'] = 'vty failed'
-        return jsonify(retobj)
+        return num
     vtyret = vtyret.replace('\n','')
     vtyres = vtyret.split(',')
     event_total += int(vtyres[0].replace('total_num=',''))
     event_today += int(vtyres[1].replace('today_num=',''))
 
+    print '4----------------'
     type = 'arbiter'
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None or vtyret.find('%')==0):
-        retobj['status'] = 0
-        retobj['message'] = 'vty failed'
-        return jsonify(retobj)
+        return num
     vtyret = vtyret.replace('\n','')
     vtyres = vtyret.split(',')
     event_total += int(vtyres[0].replace('total_num=',''))
     event_today += int(vtyres[1].replace('today_num=',''))
 
-    return [event_total,event_today]
+    print '5----------------'
+    print event_total,event_today
+    num=[event_total,event_today]
+
+    return num
 
 ##################### 4.1 安全事件#####################
 # a 事件列表
@@ -2498,7 +2505,7 @@ def getSafeList():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd = 'show sec_event_log sip * dip * proto * stime * etime * pgindex {p} pgsize 10'
+    cmd = 'show sec_event_log sip 0.0.0.0 dip 0.0.0.0 proto * stime 1970-01-01/00:00:00 etime 2050-01-01/00:00:00 pgindex {p} pgsize 10'
     cmd = cmd.format(p=page)
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
@@ -2511,9 +2518,9 @@ def getSafeList():
     totalline = '[,,]'
     for line in vtyret.split('\n'):
         fields = line.split('|')
+        print line
         if len(fields)==1 and len(fields[0])>30:
             totalline = line
-        if (len(fields) != 9):
             continue
         jobj = {
                 "id":int(fields[0]),
@@ -2524,6 +2531,7 @@ def getSafeList():
                 "riskLevel": int(fields[6]),
                 "eventType": type
                 }
+        print 11111111111111111111111
         jrows.append(jobj)
     retobj['page'] = page
     retobj['total'] = get_total_num(totalline)
@@ -2573,7 +2581,7 @@ def searchSafeList():
         fields = line.split('|')
         if len(fields)==1 and len(fields[0])>30:
             totalline = line
-        if (len(fields) != 9):
+        if (len(fields) != 10):
             continue
         jobj = {
                 "id":int(fields[0]),
@@ -2603,31 +2611,29 @@ def getSafeConfig():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd = 'show sec_event_log sip * dip * proto * stime * etime * pgindex {p} pgsize 10'
-    cmd = cmd.format(p=page)
-    ut = Util_telnet(promt)
-    vtyret = ut.ssl_cmd(type,cmd)
-    if (vtyret is None or vtyret.find('%')==0):
-        retobj['status'] = 0
-        retobj['message'] = 'vty failed'
-        return jsonify(retobj)
+    print 11111111111
+    cmd = 'sqlite3 /data/gap_sqlite3_db.log "select * from sec_event_table where id = {0}"'.format(id)
+    vtyret = os.popen(cmd)
+    vtyret = vtyret.read()
     vtyret = strtrim(vtyret)
+    print 2222222222222
+    print vtyret
     jrows = []
-    for line in vtyret.split('\n'):
-        fields = line.split('|')
-        if (fields[0] != id):
-            continue
-        jobj = {
-                "rule":int(fields[9]),
-                "packSize": len(fields[8]),
-                "packContent": fields[8],
-                "proto": fields[5],
-                "date": fields[1],
-                "riskLevel": int(fields[6]),
-                "eventType": type
-                }
-        break
+    fields = vtyret.split('|')
+    print len(fields)
+    jobj = {
+            "rule":fields[9],
+            "packSize": len(fields[8]),
+            "packContent": fields[8],
+            "proto": fields[5],
+            "date": fields[1],
+            "riskLevel": fields[6],
+            "eventType": type
+            }
+    print 3333333333333
+    jrows.append(jobj)
     retobj['data'] = jrows
+    print 44444444444
     write_opt_log('view',type,'getSafeConfig')
     return jsonify(retobj)
 
@@ -2641,7 +2647,7 @@ def clearSafe():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd='delete_log table sec_event_log'
+    cmd='delete_log table sec_event_table'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None or vtyret.find('%')==0):
@@ -2656,11 +2662,12 @@ def clearSafe():
 @app.route('/ajax/data/event/getEventNumSafe')
 def getEventNumSafe():
     eventinfo =  getEventNum('sec_event_table')
-    syseventinfo = {
+    safeeventinfo = {
         "totalEvent": eventinfo[0],
-        "todaySysEvent": eventinfo[1]
+        "todaySafeEvent": eventinfo[1]
     }
-    retobj['syseventinfo'] = syseventinfo
+    retobj={}
+    retobj['safeeventinfo'] = safeeventinfo
     return jsonify(retobj)
 # f 导出事件
 @app.route('/ajax/data/event/exportSafe')
@@ -2740,8 +2747,11 @@ def searchSysList():
         endtime='2050-01-01/00:00:00'
     starttime = starttime.replace(' ','/')
     endtime = endtime.replace(' ','/')
+    print starttime
+    print endtime
     cmd = 'show sys_event_log stime {st} etime {et} content {c}  pgindex {p} pgsize 10'
-    cmd = cmd.format(st=starttime,et=endtime,c=content,pg=page)
+    cmd = cmd.format(st=starttime,et=endtime,c=content,p=page)
+    print cmd
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None or vtyret.find('%')==0):
@@ -2780,7 +2790,7 @@ def clearSys():
         retobj['status'] = 0
         retobj['message'] = 'invalid request'
         return jsonify(retobj)
-    cmd='delete_log table sys_event_log'
+    cmd='delete_log table sys_event_table'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(type,cmd)
     if (vtyret is None or vtyret.find('%')==0):
@@ -2794,11 +2804,12 @@ def clearSys():
 @app.route('/ajax/data/event/getEventNumSys')
 def getEventNumSys():
     eventinfo = getEventNum('sys_event_table')
-    safeeventinfo = {
+    syseventinfo = {
         "totalEvent": eventinfo[0],
-        "todaySafeEvent": eventinfo[1]
+        "todaySysEvent": eventinfo[1]
     }
-    retobj['safeeventinfo'] = safeeventinfo
+    retobj = {}
+    retobj['syseventinfo'] = syseventinfo
     return jsonify(retobj)
 
 # f 导出事件
@@ -2898,36 +2909,47 @@ def __select_session(proto,inip,outip,user,page,pagesize=10,mach='inner'):
         outip = '0.0.0.0'
     if (len(user) == 0):
         user = '*'
+    print 111111
     retobj = {'page':1, 'data':[],'total':0}
     if (inip is None or outip is None or user is None or page is None):
         return retobj
+    print 2222222
     cmd='show session proto {p} user {u} sip {s} dip {d} pgindex {pi} pgsize {ps}'
     cmd = cmd.format(p=proto,u=user,s=outip,d=inip,pi=page,ps=pagesize)
+    print 33333333
+    print cmd
+    print 'xxxxxxxxxxxxx'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(mach, cmd)
+    print 44444444
+    print vtyret
+    print 44444444
     if (vtyret is None or vtyret.find('%')==0):
         return retobj      
     vtyret = strtrim(vtyret)
+    print vtyret
     jrows = []
     id=0
     for line in vtyret.split('\n'):
+        print line
         fields = line.split(' ')
-        if (len(fields) != 12):
+        if (len(fields) < 12):
             retobj['total'] = __get_totalline(line)
             continue 
         jobj = {
-          'sessionId': fields[0],
-          'name': fields[1],
+        #1 226 2 none 2016-11-24T02:57:31Z 192.168.10.138 61406 0.0.0.0 0 0.0.0.0 0 192.168.10.55 80 0 0 0 0
+          'sessionId': fields[1],
           'state': fields[2],
-          'date': fields[3],
-          'outIp': fields[4],
-          'outPort': fields[5],
-          'inIp': fields[6],
-          'inPort': fields[7],
-          'outRecv': fields[8],
-          'outSend': fields[9],
-          'inRecv': fields[10],
-          'inSend': fields[11]
+          'name': fields[3],
+          'date': fields[4],
+          'outIp': fields[5],
+          'outPort': fields[6],
+          'inIp': fields[11],
+          'inPort': fields[12],
+          'outRecv': fields[16],
+          'outSend': fields[15],
+          'inRecv': fields[13],
+          'inSend': fields[14]
                 }
         id = id + 1
         jrows.append(jobj)
@@ -3136,21 +3158,30 @@ def __get_machstate(mach):
 
 #私有函数，获取指定机器的接口总流量值(历史流量)
 def __get_traffic(mach):
+    mytime = time.strftime("%H:%M:%S",time.localtime(time.time()))
+    myretobj = {'points':[0],'timePoints':[mytime]}
     retobj = {'points':[],'timePoints':[]}
 
     cmd='show traffic'
     ut = Util_telnet(promt)
     vtyret = ut.ssl_cmd(mach, cmd)
     if (vtyret is None or vtyret.find('%')==0):
-        return retobj
+        return myretobj
 
     vtyret = strtrim(vtyret)
+    i = 0
     for line in vtyret.split('\n'):
         fields = line.split(' ')
+        if (len(fields) < 3 ):
+            continue
+        i = i + 1
         x = time.strftime("%H:%M:%S",time.localtime(int(fields[0])))
         retobj['timePoints'].append(x)
         y = round((float(fields[1])+float(fields[2]))*8/1000, 1)
+        y = str(y)
         retobj['points'].append(y)
+    if (i == 0):
+        return myretobj
     return retobj
 
 #私有函数，获取指定机器的接口总流量点值(当前流量)
@@ -3172,8 +3203,11 @@ def __get_traffic_point(mach):
             up = float(fields[1])
         elif (fields[0] == 'traffic-down-bandwidth'):
             down = float(fields[1])
-        retobj['timePoint'] = time.strftime("%H:%M:%S",time.localtime(time.time()))
-        retobj['point'] = round((up+down)*8/1000, 1)
+        elif (fields[0] == 'Time'):
+            t = fields[1].split(' ')
+            retobj['timePoint'] = t[1]
+
+    retobj['point'] = round((up+down)*8/1000, 1)
     return retobj
 
 #内端机接口总流量值查询
@@ -3229,7 +3263,7 @@ def getStateArbiter():
 @app.route('/ajax/data/device/getDeviceInfo')
 def getDeviceInfo():
     mach = req_get('type')
-    retobj = {'data':[{'devNo':'KED-U1200', 'devType':'', 'SN':'', 'version':''}]}
+    retobj = {'data':[{'devNo':'KED-U1200', 'devType':'', 'SN':'00000000', 'version':''}]}
 
     cmd='show machinfo'
     ut = Util_telnet(promt)
@@ -3244,7 +3278,7 @@ def getDeviceInfo():
             retobj['data'][0]['devNo'] = fields[1]
         elif (fields[0] == 'devType'):
             retobj['data'][0]['devType'] = fields[1]
-        elif (fields[0] == 'SN'):
+        elif (fields[0] == 'SN' and fields[1] != ''):
             retobj['data'][0]['SN'] = fields[1]      
         elif (fields[0] == 'version'):
             retobj['data'][0]['version'] = fields[1]
@@ -3282,7 +3316,7 @@ def getCertificatList():
 def upgradeCertificat():
     retobj = {'status':0}
 
-    f = request.files['file']
+    f = request.files['fileUpload']
     if (f is None):
         return jsonify(retobj) 
 
@@ -3300,40 +3334,44 @@ def upgradeCertificat():
         tmp = '/tmp/cert_upgrade/local.tar'
     f.save(tmp)
 
-    if (t == 'root'):
-        cmd='''vtysh -c 'configure terminal' -c 'upgrade inner cacrt {0}'
-            '''.format(tmp)
-        os.popen(cmd)
-        cmd='''vtysh -c 'configure terminal' -c 'upgrade outer cacrt {0}'
-            '''.format(tmp)
-        os.popen(cmd)
-    else:
-        cmd='tar -xvf {src} -C /tmp/cert_upgrade'
-        cmd = cmd.format(src=tmp)
-        os.system(cmd)
-        cmd='rm -rf {src}'
-        cmd = cmd.format(src=tmp)
-        os.system(cmd) 
+    try:
+        if (t == 'root'):
+            cmd='''vtysh -c 'configure terminal' -c 'upgrade inner cacrt {0}'
+                '''.format(tmp)
+            os.popen(cmd)
+            cmd='''vtysh -c 'configure terminal' -c 'upgrade outer cacrt {0}'
+                '''.format(tmp)
+            os.popen(cmd)
+        else:
+            cmd='tar -zxvf {src} -C /tmp/cert_upgrade'
+            cmd = cmd.format(src=tmp)
+            os.system(cmd)
+            cmd='rm -rf {src}'
+            cmd = cmd.format(src=tmp)
+            os.system(cmd) 
 
-        files = os.popen('ls /tmp/cert_upgrade/')
-        files_name = files.read()
-        files_name = strtrim(files_name)
+            files = os.popen('ls /tmp/cert_upgrade/')
+            files_name = files.read()
+            files_name = strtrim(files_name)
 
-        for f in files_name.split('\n'):
-            if (4 == len(f and '.crt')):
-                cmd='''vtysh -c 'configure terminal' -c 'upgrade inner crt {0}'
-                    '''.format(f)
-                os.popen(cmd)
-                cmd='''vtysh -c 'configure terminal' -c 'upgrade outer crt {0}'
-                    '''.format(f)
-                os.popen(cmd) 
-            elif (4 == len(f and '.key')):
-                cmd='''vtysh -c 'configure terminal' -c 'upgrade inner key {0}'
-                    '''.format(f)
-                os.popen(cmd)
-                cmd='''vtysh -c 'configure terminal' -c 'upgrade outer key {0}'
-                    '''.format(f)
-                os.popen(cmd)            
+            for f in files_name.split('\n'):
+                tmpfile = '/tmp/cert_upgrade/' + f
+                if (4 == len(f and '.crt')):
+                    cmd='''vtysh -c 'configure terminal' -c 'upgrade inner crt {0}'
+                        '''.format(tmpfile)
+                    os.popen(cmd)
+                    cmd='''vtysh -c 'configure terminal' -c 'upgrade outer crt {0}'
+                        '''.format(tmpfile)
+                    os.popen(cmd) 
+                elif (4 == len(f and '.key')):
+                    cmd='''vtysh -c 'configure terminal' -c 'upgrade inner key {0}'
+                        '''.format(tmpfile)
+                    os.popen(cmd)
+                    cmd='''vtysh -c 'configure terminal' -c 'upgrade outer key {0}'
+                        '''.format(tmpfile)
+                    os.popen(cmd)  
+    except:     
+        return jsonify(retobj)  
 
     retobj['status'] = 1
     write_opt_log('update','','upgradeCertificat')
@@ -3350,15 +3388,14 @@ def __get_rpm_info(rpm):
 
 
 #系统升级
-@app.route('/ajax/data/device/upgradeSystem')
+@app.route('/ajax/data/device/upgradeSystem',methods=['post'])
 def upgradeSystem():
     dic_rpm = {'web':['inner'], \
             'pciehp':['arbiter'], \
             'is8u256a':['inner', 'outer'],\
             'engine-rsa':['inner','outer']}
-
     retobj = {'status':1}
-    f = request.files['file']
+    f = request.files['fileUpload']
     if (f is None):
         return jsonify(retobj) 
 
@@ -3367,10 +3404,10 @@ def upgradeSystem():
     cmd='mkdir -p /tmp/gap_upgrade'
     os.system(cmd)
 
-    tmp = '/tmp/gap_upgrade'+ f.filename
+    tmp = '/tmp/gap_upgrade/gap.update'
     f.save(tmp)
 
-    cmd='tar -xvf {src} -C /tmp/gap_upgrade'
+    cmd='tar -zxvf {src} -C /tmp/gap_upgrade'
     cmd = cmd.format(src=tmp)
     os.system(cmd)
 
@@ -3382,36 +3419,48 @@ def upgradeSystem():
     files_name = files.read()
     files_name = strtrim(files_name)
 
-    for f in files_name.split('\n'):
-        name = __get_rpm_info(f)
-        if (name in dic_rpm.keys()):
-            for i in dic_rpm[name]:
-                cmd='''vtysh -c 'configure terminal' -c 'upgrade {0} rpm {1}'
-                '''.format(i, f)
+    try:
+        for f in files_name.split('\n'):
+            tmpfile = '/tmp/gap_upgrade/' + f
+            name = __get_rpm_info(f)
+            if (name in dic_rpm.keys()):
+                for i in dic_rpm[name]:
+                    cmd='''vtysh -c 'configure terminal' -c 'upgrade {0} rpm {1}'
+                    '''.format(i, tmpfile)
+                    print i,':',tmpfile
+                    os.popen(cmd)
+            else:
+                cmd='''vtysh -c 'configure terminal' -c 'upgrade outer rpm {0}'
+                    '''.format(tmpfile)
+                print cmd
                 os.popen(cmd)
-        else:
-            cmd='''vtysh -c 'configure terminal' -c 'upgrade outer rpm {0}'
-                '''.format(f)
-            os.popen(cmd)
 
-            cmd='''vtysh -c 'configure terminal' -c 'upgrade arbiter rpm {0}'
-                '''.format(f)
-            os.popen(cmd) 
+                cmd='''vtysh -c 'configure terminal' -c 'upgrade arbiter rpm {0}'
+                    '''.format(tmpfile)
+                os.popen(cmd) 
 
-            cmd='''vtysh -c 'configure terminal' -c 'upgrade inner rpm {0}'
-                '''.format(f)
-            os.popen(cmd) 
-    write_opt_log('update','','upgradeSystem')
+                cmd='''vtysh -c 'configure terminal' -c 'upgrade inner rpm {0}'
+                    '''.format(tmpfile)
+                os.popen(cmd) 
+
+        write_opt_log('update','','upgradeSystem')
+    except:
+        retobj['status'] = 0
+        return jsonify(retobj) 
+
     return jsonify(retobj) 
 
 #恢复出厂设置
 @app.route('/ajax/data/device/updateSystemRestore')
 def updateSystemRestore():
     retobj = {'status':1}
-    cmd='''vtysh -c 'configure terminal' -c 'reset'
-        '''
-    os.popen(cmd)
-    write_opt_log('recover','','updateSystemRestore')
+    cmd='reset'
+    ut = Util_telnet(promt)
+    vtyret = ut.ssl_cmd("outer", cmd)
+    vtyret = ut.ssl_cmd("arbiter", cmd)
+    vtyret = ut.ssl_cmd("inner", cmd)
+
+    #write_opt_log('recover','','updateSystemRestore')
     return jsonify(retobj) 
 
 #重启
@@ -3457,15 +3506,19 @@ def updateSystemClose():
 @app.route('/')
 def route_root():
     return redirect('index.html')
+
 @app.route('/<path>')
 @app.route('/templates/<path>')
 @app.route('/templates/device/<path>')
 @app.route('/templates/device/admin/<path>')
-@app.route('/templates/device/arbiter/<path>')
-@app.route('/templates/device/inner/<path>')
-@app.route('/templates/device/inner/dialog/<path>')
-@app.route('/templates/device/outer/<path>')
-@app.route('/templates/device/outer/dialog/<path>')
+@app.route('/templates/device/double/<path>')
+@app.route('/templates/device/general/<path>')
+@app.route('/templates/device/general/dialog/<path>')
+@app.route('/templates/device/info/<path>')
+@app.route('/templates/device/ip/<path>')
+@app.route('/templates/device/login/<path>')
+@app.route('/templates/device/network/<path>')
+@app.route('/templates/device/network/dialog/<path>')
 @app.route('/templates/device/router/<path>')
 @app.route('/templates/device/router/dialog/<path>')
 @app.route('/templates/event/<path>')
