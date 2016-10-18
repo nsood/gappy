@@ -2893,6 +2893,13 @@ def checkUser():
         retobj['status'] = 3
         return jsonify(retobj)
 
+
+@app.route('/ajax/data/user/loginOut')
+def loginOut():
+    retobj = {'status':1, 'message':'ok'}
+    session.pop('username', None)
+    return jsonify(retobj)
+
 #----------------------------------------------------------add by zqzhang----------------------------------------------------------
 #私有函数，获取total line
 def __get_totalline(s):
@@ -3324,52 +3331,49 @@ def upgradeCertificat():
     if (t is None):
         return jsonify(retobj) 
 
-    cmd='rm -rf /tmp/cert_upgrade'
-    os.system(cmd)
-    cmd='mkdir -p /tmp/cert_upgrade'
-    os.system(cmd)
     if (t == 'root'):
-        tmp = '/tmp/cert_upgrade/root.crt'
+        tmp = '/tmp/root.crt'
     else:
-        tmp = '/tmp/cert_upgrade/local.tar'
+        tmp = '/tmp/local.tar'
     f.save(tmp)
 
     try:
         if (t == 'root'):
-            cmd='''vtysh -c 'configure terminal' -c 'upgrade inner cacrt {0}'
-                '''.format(tmp)
+            cmd="vtysh -c 'configure terminal' -c 'upgrade inner cacrt root.crt"
             os.popen(cmd)
-            cmd='''vtysh -c 'configure terminal' -c 'upgrade outer cacrt {0}'
-                '''.format(tmp)
+            cmd="vtysh -c 'configure terminal' -c 'upgrade outer cacrt root.crt"
             os.popen(cmd)
         else:
-            cmd='tar -zxvf {src} -C /tmp/cert_upgrade'
+            cmd='tar -zxvf {src} -C /tmp/'
             cmd = cmd.format(src=tmp)
             os.system(cmd)
             cmd='rm -rf {src}'
             cmd = cmd.format(src=tmp)
             os.system(cmd) 
 
-            files = os.popen('ls /tmp/cert_upgrade/')
+            files = os.popen('ls /tmp/')
             files_name = files.read()
             files_name = strtrim(files_name)
 
             for f in files_name.split('\n'):
-                tmpfile = '/tmp/cert_upgrade/' + f
-                if (4 == len(f and '.crt')):
+                tmpfile = f
+                if (os.path.splitext(f)[1] == '.crt'):
                     cmd='''vtysh -c 'configure terminal' -c 'upgrade inner crt {0}'
                         '''.format(tmpfile)
                     os.popen(cmd)
                     cmd='''vtysh -c 'configure terminal' -c 'upgrade outer crt {0}'
                         '''.format(tmpfile)
                     os.popen(cmd) 
-                elif (4 == len(f and '.key')):
+                elif (os.path.splitext(f)[1] == '.key'):
                     cmd='''vtysh -c 'configure terminal' -c 'upgrade inner key {0}'
                         '''.format(tmpfile)
                     os.popen(cmd)
                     cmd='''vtysh -c 'configure terminal' -c 'upgrade outer key {0}'
                         '''.format(tmpfile)
                     os.popen(cmd)  
+                cmd='''rm -rf /tmp/{0}'
+                    '''.format(tmpfile)
+                os.popen(cmd) 
     except:     
         return jsonify(retobj)  
 
@@ -3399,15 +3403,11 @@ def upgradeSystem():
     if (f is None):
         return jsonify(retobj) 
 
-    cmd='rm -rf /tmp/gap_upgrade'
-    os.system(cmd)
-    cmd='mkdir -p /tmp/gap_upgrade'
-    os.system(cmd)
 
-    tmp = '/tmp/gap_upgrade/gap.update'
+    tmp = '/tmp/gap.update'
     f.save(tmp)
 
-    cmd='tar -zxvf {src} -C /tmp/gap_upgrade'
+    cmd='tar -zxvf {src} -C /tmp/'
     cmd = cmd.format(src=tmp)
     os.system(cmd)
 
@@ -3415,34 +3415,39 @@ def upgradeSystem():
     cmd = cmd.format(src=tmp)
     os.system(cmd)
 
-    files = os.popen('ls /tmp/gap_upgrade/')
+    files = os.popen('ls /tmp')
     files_name = files.read()
     files_name = strtrim(files_name)
 
     try:
         for f in files_name.split('\n'):
-            tmpfile = '/tmp/gap_upgrade/' + f
-            name = __get_rpm_info(f)
+            if (os.path.splitext(f)[1] != '.rpm'):
+                continue
+            tmpfile = '/tmp/'+f
+            name = __get_rpm_info(tmpfile)
             if (name in dic_rpm.keys()):
                 for i in dic_rpm[name]:
                     cmd='''vtysh -c 'configure terminal' -c 'upgrade {0} rpm {1}'
-                    '''.format(i, tmpfile)
-                    print i,':',tmpfile
+                    '''.format(i, f)
+                    print i,':',f
                     os.popen(cmd)
             else:
                 cmd='''vtysh -c 'configure terminal' -c 'upgrade outer rpm {0}'
-                    '''.format(tmpfile)
+                    '''.format(f)
                 print cmd
                 os.popen(cmd)
 
                 cmd='''vtysh -c 'configure terminal' -c 'upgrade arbiter rpm {0}'
-                    '''.format(tmpfile)
+                    '''.format(f)
                 os.popen(cmd) 
 
                 cmd='''vtysh -c 'configure terminal' -c 'upgrade inner rpm {0}'
-                    '''.format(tmpfile)
+                    '''.format(f)
                 os.popen(cmd) 
 
+            cmd='''rm -rf /tmp/{0}'
+                    '''.format(f)
+            os.popen(cmd) 
         write_opt_log('update','','upgradeSystem')
     except:
         retobj['status'] = 0
