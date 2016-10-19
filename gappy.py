@@ -410,8 +410,44 @@ def setDoubleConfig():
         retobj['message'] = 'input error'
         return jsonify(retobj)
     dataobj = jstrtoobj(data)
-    
+    state= (dataobj.haRole=='0') and 'act' or 'stb'
+    state_b = (state=='act') and 'stb' or 'act'
+    port = dataobj.haPortInner
+    vtycmd = "vtysh -c 'configure terminal' -c 'ha' -c '{c}'"
+    save_cmd = "vtysh -c 'configure terminal' -c 'write file'"
+    cmd = "set {io} {pre_st} state {st} ip {i} port {p} priority {prior}"
+    cmd_i = cmd.format(io='inner',pre_st='act',st=state,i=dataobj.haInner,p=port,prior=dataobj.prior)
+    cmd_o = cmd.format(io='outer',pre_st='act',st=state,i=dataobj.haOuter,p=port,prior=dataobj.prior)
+    cmd_i_b = cmd.format(io='inner',pre_st='stb',st=state_b,i=dataobj.haBackupInner,p=port,prior=dataobj.haPriorBackup)
+    cmd_o_b = cmd.format(io='outer',pre_st='stb',st=state_b,i=dataobj.haBackupOuter,p=port,prior=dataobj.haPriorBackup)
 
+    vtyret = os.popen(vtycmd.format(c=cmd_o_b)).read()
+    if (vtyret is None or vtyret.find('%')==0):
+        retobj['message'] = 'vty set cmd_o_b error'
+        retobj['status'] = 0
+        return jsonify(retobj)
+    vtyret = os.popen(vtycmd.format(c=cmd_i_b)).read()
+    if (vtyret is None or vtyret.find('%')==0):
+        retobj['message'] = 'vty set cmd_i_b error'
+        retobj['status'] = 0
+        return jsonify(retobj)
+    vtyret = os.popen(vtycmd.format(c=cmd_o)).read()
+    if (vtyret is None or vtyret.find('%')==0):
+        retobj['message'] = 'vty set cmd_o error'
+        retobj['status'] = 0
+        return jsonify(retobj)
+    vtyret = os.popen(vtycmd.format(c=cmd_i)).read()
+    if (vtyret is None or vtyret.find('%')==0):
+        retobj['message'] = 'vty set cmd_i error'
+        retobj['status'] = 0
+        return jsonify(retobj)
+    vtyret = os.popen(save_cmd).read()
+    if (vtyret is None or vtyret.find('%')==0):
+        retobj['message'] = 'vty save_cmd error'
+        retobj['status'] = 0
+        return jsonify(retobj)
+    write_opt_log('edit','inner','set HA conf')
+    return jsonify(retobj)
 
 
 ##################### 1.4登录配置 #########################
@@ -2833,6 +2869,7 @@ def checkUser():
     username = req_get('username')
     password = req_get('pw')
     remote_ip = request.remote_addr
+    login_log = LoginObj()
 
     if (username is None or password is None):
         login_log.write_login_log(remote_ip,username,login_log.state[1],'unexist user')
@@ -2878,11 +2915,12 @@ def checkUser():
         "userrole": sql_role,
         "username": sql_user
     }
-    login_log = LoginObj()
     #密码字符匹配
     if password==sql_passwd:
         session_set('user', username)
         session_set('ip', remote_ip)
+        session.permanent = True
+        app.permanent_session_lifetime = timedelta(minutes=timelogout)
         retobj['login_info'] = jrows
         login_log.write_login_log(remote_ip,username,login_log.state[0],'login success')
         return jsonify(retobj)
